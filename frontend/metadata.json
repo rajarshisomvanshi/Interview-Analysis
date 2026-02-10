@@ -1,0 +1,9 @@
+
+{
+  "name": "DEXTORA AI - Interview Intelligence",
+  "description": "A futuristic AI-powered interview analysis platform that decodes human behavior using advanced CCTV telemetry and neural networks.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

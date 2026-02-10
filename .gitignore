@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.env.local
+
+# Node/Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data & Models
+data/
+models/
+*.pt
+*.mp4
+*.wav
+
+# Logs & Debug Output
+*.log
+*.txt
+debug/
+temp_check/
+frontend_debug_output.txt
+
+# Testing & Diagnostic Scripts (User Requested Exclusion)
+check_*.py
+debug_*.py
+test_*.py
+diagnose_*.py
+verify_*.py
+analyze_offline.py
+generate_*.py
+patch_scores.py
+recover_slices.py
+probe_mediapipe.py
+read_log*.py
+context_check.py
+final_check.py
+find_session.py
+run_analysis_job.py
