@@ -164,6 +164,37 @@ Provide your session summary now:"""
         return prompt
         
     @staticmethod
+    def q_a_extraction_prompt(transcript_text: str) -> str:
+        """
+        Generate prompt for extracting Q&A pairs from transcript.
+        """
+        prompt = f"""You are an expert interview analyst. Your task is to extract all significant question and answer pairs from the provided interview transcript.
+        
+        **CRITICAL INSTRUCTIONS:**
+        1. Identify clear questions asked (likely by an interviewer/interviewer role).
+        2. Identify the corresponding answers given.
+        3. Maintain the core meaning and tone of both the question and the answer.
+        4. Summarize long responses without losing critical substance.
+        5. Return the result as a strict JSON list of objects.
+        
+        Required JSON format:
+        [
+          {{
+            "question": "The question asked",
+            "answer": "The answer provided"
+          }},
+          ...
+        ]
+        
+        **TRANSCRIPT:**
+        ---
+        {transcript_text}
+        ---
+        
+        JSON RESPONSE:"""
+        return prompt
+
+    @staticmethod
     def format_analysis_response(response_text: str) -> Dict[str, str]:
         """
         Parse LLM response into structured format.

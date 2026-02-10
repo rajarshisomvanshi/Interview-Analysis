@@ -27,7 +27,9 @@ from api.models import (
     ForensicEventsResponse,
     ForensicScoresResponse,
     ForensicSignal,
-    ForensicEvent
+    ForensicEvent,
+    TranslationRequest,
+    TranslationResponse
 )
 from core.schemas import SessionMetadata, SessionData, PersonIdentity, TimeSliceAnalysis, SessionAnalysis
 from core.storage import storage
@@ -186,6 +188,7 @@ async def analyze_quick(
     Returns a dashboard URL for tracking.
     """
     try:
+        print(f"DEBUG: analyze_quick called for user: {user_id}", flush=True)
         log_debug(f"analyze_quick called for user: {user_id}")
         # 1. Create Session
         session_id = str(uuid.uuid4())
@@ -227,6 +230,7 @@ async def analyze_quick(
         logger.info(f"Quick analysis started for session {session_id} (User: {user_id})")
         
         # 3. Trigger Background Analysis
+        print(f"DEBUG: Adding background task for session {session_id}", flush=True)
         background_tasks.add_task(run_analysis, session_id)
         
         # 4. Return Dashboard URL
@@ -284,6 +288,7 @@ def run_analysis(session_id: str):
     Run complete analysis pipeline (background task).
     """
     try:
+        print(f"DEBUG: run_analysis STARTED for session {session_id}", flush=True)
         log_debug(f"run_analysis started for session_id: {session_id}")
         logger.info(f"Starting analysis for session {session_id}")
         
@@ -315,6 +320,11 @@ def run_analysis(session_id: str):
         
         # Initialize timeline
         timeline = UnifiedTimeline()
+        
+        # Calculate total duration for progress tracking
+        total_duration_ms = 0
+        if phone_video_path and phone_video_path.exists():
+            total_duration_ms = VideoUtils.get_video_duration_ms(phone_video_path)
         
         # Step 1: Vision processing
         session_status[session_id] = {"status": "processing", "progress": 0.1, "current_step": "Processing videos"}
@@ -375,8 +385,8 @@ def run_analysis(session_id: str):
                     session_status[session_id]["slices"] = current_slices
                     
                     # Update progress: Step 1 is vision (10% to 40%)
-                    if total_duration > 0:
-                        progress = 0.1 + (0.3 * (slice_analysis.end_ms / (total_duration * 1000)))
+                    if total_duration_ms > 0:
+                        progress = 0.1 + (0.3 * (slice_analysis.end_ms / total_duration_ms))
                         session_status[session_id]["progress"] = min(0.4, progress)
                     
                 logger.info(f"Saved interim slice {len(session_data.analysis.slices)} to session data. Progress: {session_status[session_id].get('progress')}")
@@ -419,10 +429,21 @@ def run_analysis(session_id: str):
         for segment in transcript_segments:
             timeline.add_event(segment)
             
-        # Step 3: Question-answer segmentation
-        session_status[session_id] = {"status": "processing", "progress": 0.6, "current_step": "Segmenting Q&A pairs"}
-        segmenter = QuestionAnswerSegmenter()
-        qa_pairs = segmenter.segment(transcript_segments)
+        # Step 3: Question-answer segmentation (LLM-based with Heuristic Fallback)
+        session_status[session_id] = {"status": "processing", "progress": 0.6, "current_step": "Extracting Q&A pairs via LLM"}
+        analyzer = InterviewAnalyzer()
+        try:
+            qa_pairs = analyzer.extract_q_a_pairs(transcript_segments)
+            if not qa_pairs:
+                logger.info("LLM Q&A extraction returned empty, falling back to heuristic")
+                segmenter = QuestionAnswerSegmenter()
+                qa_pairs = segmenter.segment(transcript_segments)
+            else:
+                logger.info(f"Successfully extracted {len(qa_pairs)} Q&A pairs via LLM")
+        except Exception as e:
+            logger.error(f"LLM Q&A extraction failed: {e}. Falling back to heuristic.")
+            segmenter = QuestionAnswerSegmenter()
+            qa_pairs = segmenter.segment(transcript_segments)
         
         # Step 4: Signal aggregation
         session_status[session_id] = {"status": "processing", "progress": 0.7, "current_step": "Aggregating signals"}
@@ -494,6 +515,8 @@ def run_analysis(session_id: str):
         logger.info(f"Analysis complete for session {session_id}")
         
     except Exception as e:
+        print(f"DEBUG: run_analysis CRASHED: {e}", flush=True)
+        traceback.print_exc()
         logger.error(f"Analysis failed for session {session_id}: {e}")
         session_status[session_id] = {
             "status": "failed",
@@ -502,7 +525,6 @@ def run_analysis(session_id: str):
             "error_message": str(e)
         }
         log_debug(f"run_analysis failed for {session_id}: {e}")
-        import traceback
         log_debug(traceback.format_exc())
 
 
@@ -591,7 +613,8 @@ async def get_analysis_results(session_id: str):
                 dialogue=s.dialogue,
                 behavioral_analysis=s.behavioral_analysis
             ) for s in analysis.slices
-        ] if hasattr(analysis, "slices") and analysis.slices else []
+        ] if hasattr(analysis, "slices") and analysis.slices else [],
+        qa_pairs=session_data.question_answer_pairs if session_data.question_answer_pairs else []
     )
 
 
@@ -782,6 +805,18 @@ async def chat_with_session(session_id: str, request: ChatRequest):
     except Exception as e:
         logger.error(f"Error in chat: {e}")
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/translate", response_model=TranslationResponse)
+async def translate_text(request: TranslationRequest):
+    """Translate text to target language (default: Hindi)"""
+    try:
+        analyzer = InterviewAnalyzer()
+        translated = analyzer.translate_text(request.text, request.target_language)
+        return TranslationResponse(translated_text=translated)
+    except Exception as e:
+        logger.error(f"Error in translation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
