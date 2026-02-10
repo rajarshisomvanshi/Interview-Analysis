@@ -1,11 +1,38 @@
 version: '3.8'
 
 services:
-  api:
-    build: .
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: interview-backend
     ports:
-      - "2000:2000"
-    env_file:
-      - .env
+      - "8000:8000"
     volumes:
-      - ./src:/app/src
+      - ./data:/app/data
+      - ./debug:/app/debug
+      - ./models:/app/models
+    environment:
+      - API_PORT=8000
+      - API_HOST=0.0.0.0
+      - ENV_FILE=.env
+    restart: unless-stopped
+    networks:
+      - interview-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: interview-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - interview-net
+
+networks:
+  interview-net:
+    driver: bridge

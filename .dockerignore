@@ -1,0 +1,13 @@
+
+__pycache__
+*.pyc
+*.pyo
+venv/
+.env
+.git
+.gitignore
+data/
+debug/
+*.log
+frontend/dist
+frontend/node_modules
