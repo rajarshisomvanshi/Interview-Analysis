@@ -152,7 +152,7 @@ Provide your analysis now:"""
    - High-level summary of interview performance based on behavioral observations
    - Use cautious, evidence-based language
 
-5. **Quantitative Scoring**:
+5. **Quantitative Scoring** (CRITICAL: Provide actual numbers 0-100, do NOT use placeholders):
    - Integrity Score: [0-100] (Likelihood of honesty based on consistency)
    - Confidence Score: [0-100] (Based on fluency, eye contact, latency)
    - Risk Score: [0-100] (Based on stress indicators and inconsistencies)

@@ -307,6 +307,7 @@ class VisionPipeline:
 
         # Transcript generation (Full)
         transcript_text = ""
+        detected_language = "en" # Default
         if self.transcriber:
             import tempfile
             import os
@@ -414,6 +415,13 @@ class VisionPipeline:
             except Exception as e:
                 logger.warning(f"Failed to parse LLM description: {e}")
 
+        # Calculate baseline score from vision signals
+        # Eye contact (0-1) maps to 40-90
+        vision_score = max(40.0, min(95.0, (avg_eye_contact * 50) + 40))
+        # Blink rate adjustment (normal 15-20 bpm)
+        if blink_rate > 30 or blink_rate < 5:
+            vision_score -= 10
+            
         slice_analysis = TimeSliceAnalysis(
             start_ms=int(last_ts),
             end_ms=int(current_ts),
@@ -422,7 +430,10 @@ class VisionPipeline:
             scene_description=scene_desc,
             dialogue=dialogue,
             behavioral_analysis=behavioral,
-            score=0.0 # Default
+            score=round(vision_score, 1),
+            fluency=round(vision_score + 2, 1), # Placeholder until transcript
+            confidence=round(vision_score - 2, 1),
+            attitude=80.0
         )
         
         # Invoke callback if provided

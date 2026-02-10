@@ -71,10 +71,16 @@ class StorageManager:
             logger.warning(f"Session data not found: {session_id}")
             return None
             
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data_dict = json.load(f)
-            
-        return SessionData(**data_dict)
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data_dict = json.load(f)
+            return SessionData(**data_dict)
+        except json.JSONDecodeError:
+            logger.error(f"Corrupt session data JSON: {session_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading session data {session_id}: {e}")
+            return None
     
     def save_analysis(self, session_id: str, analysis: SessionAnalysis) -> Path:
         """
@@ -115,10 +121,16 @@ class StorageManager:
             logger.warning(f"Analysis not found: {session_id}")
             return None
             
-        with open(analysis_path, 'r', encoding='utf-8') as f:
-            analysis_dict = json.load(f)
-            
-        return SessionAnalysis(**analysis_dict)
+        try:
+            with open(analysis_path, 'r', encoding='utf-8') as f:
+                analysis_dict = json.load(f)
+            return SessionAnalysis(**analysis_dict)
+        except json.JSONDecodeError:
+            logger.error(f"Corrupt analysis JSON: {session_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading analysis {session_id}: {e}")
+            return None
     
     def save_video(self, session_id: str, video_type: str, source_path: Path) -> Path:
         """

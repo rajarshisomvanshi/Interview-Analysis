@@ -162,6 +162,10 @@ class Settings(BaseSettings):
         default=None,
         description="OpenAI API key"
     )
+    openai_base_url: Optional[str] = Field(
+        default=None,
+        description="OpenAI base URL (for compatible APIs)"
+    )
     anthropic_api_key: Optional[str] = Field(
         default=None,
         description="Anthropic API key"
@@ -251,6 +255,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
         
     def get_session_dir(self, session_id: str) -> Path:
         """Get directory path for a specific session"""

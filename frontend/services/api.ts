@@ -79,5 +79,21 @@ export const api = {
             return null;
         }
         return await response.json();
+    },
+
+    // Translate text
+    async translateText(text: string, targetLanguage: string = 'Hindi'): Promise<string> {
+        const response = await fetch(`${API_BASE_URL}/translate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, target_language: targetLanguage })
+        });
+
+        if (!response.ok) {
+            throw new Error('Translation failed');
+        }
+
+        const data = await response.json();
+        return data.translated_text;
     }
 };

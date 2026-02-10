@@ -18,6 +18,22 @@ export interface Candidate {
   executiveSummary?: string;
   chatHistory?: Message[];
   slices?: TimeSlice[];
+  qaPairs?: QuestionAnswerPair[];
+}
+
+export interface QuestionAnswerPair {
+  qa_index: number;
+  question_text: string;
+  response_text: string;
+  question_start_ms: number;
+  question_end_ms: number;
+  response_start_ms: number;
+  response_end_ms: number;
+  analysis?: {
+    summary: string;
+    confidence_indicators: string;
+    communication_clarity: string;
+  };
 }
 
 export interface Message {

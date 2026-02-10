@@ -162,32 +162,50 @@ class InterviewAnalyzer:
                 
         # 2. Generate Executive Summary & Aggregated Scores
         try:
-            # Construct context from Q&A analyses
+            # Construct context from Q&A analyses or Transcript Fallback
             qa_summaries = "\n".join([f"Q{qa.qa_index}: {qa.summary}" for qa in session_analysis.question_analyses])
             
+            # If Q&A analysis failed or is empty, fallback to raw transcript
+            context_text = ""
+            if len(session_analysis.question_analyses) > 0:
+                context_text = f"Key Insights per Question:\n{qa_summaries}"
+            elif transcript_segments:
+                # Fallback to raw transcript text
+                full_transcript = "\n".join([f"{s.get('speaker', 'Unknown')}: {s.get('text', '')}" for s in transcript_segments])
+                # Truncate if too long (approx 4000 chars for safety)
+                if len(full_transcript) > 8000:
+                    full_transcript = full_transcript[:8000] + "...(truncated)"
+                context_text = f"Interview Transcript Segments:\n{full_transcript}"
+            else:
+                context_text = "No transcript or Q&A data available."
+
             prompt = f"""
-            Synthesize a comprehensive behavioral analysis for this interview session.
-            
-            Key Insights per Question:
-            {qa_summaries}
-            
-            Global Metrics (Face/Voice/Body):
-            - Integrity: Evaluate honesty and consistency.
-            - Confidence: Evaluate delivery and certainty.
-            - Risk: Evaluate red flags or deception indicators.
-            
-            Provide:
-            1. Executive Summary: High-level overview of candidate performance.
-            2. Overall Trends: Recurring behavioral patterns.
-            3. Communication Patterns: Clarity, pacing, articulation.
-            4. Behavioral Patterns: Stress responses, body language synergy.
-            5. Scores (0-100): Integrity, Confidence, Risk.
-            
-            Format:
-            Executive Summary: [Text]
-            Overall Trends: [Text]
-            Communication Patterns: [Text]
-            Behavioral Patterns: [Text]
+            You are an expert behavioral analyst. Analyze the following interview based on the provided context.
+
+            CONTEXT:
+            {context_text}
+
+            INSTRUCTIONS:
+            1. Analyze the context above to generate a comprehensive behavioral report.
+            2. Generate specific, unique content for each section below.
+            3. DO NOT repeat these instructions or the prompt in your response.
+            4. DO NOT use placeholders like "[Text]". Write the actual analysis.
+            5. Provide scoring based on the evidence (0-100).
+
+            REQUIRED OUTPUT FORMAT:
+
+            Executive Summary:
+            (Write a high-level overview of the candidate's performance, strengths, and weaknesses here)
+
+            Overall Trends:
+            (Identify recurring positive and negative behavioral patterns here)
+
+            Communication Patterns:
+            (Analyze clarity, pacing, articulation, and distinctive speech habits here)
+
+            Behavioral Patterns:
+            (Analyze stress responses, body language, and consistency here)
+
             Integrity Score: [0-100]
             Confidence Score: [0-100]
             Risk Score: [0-100]
@@ -214,6 +232,7 @@ class InterviewAnalyzer:
         # Analyze time slices
         # If we have transcripts, prioritize transcript-based slice analysis (60s granular)
         # Even if 'slices' were provided (vision-only stubs), they are replaced by richer behavioral analysis
+        slices_data = []
         if transcript_segments:
             try:
                 # Use 60000ms (1 minute) slices as requested by user previously
@@ -251,6 +270,10 @@ class InterviewAnalyzer:
             except Exception as map_err:
                 logger.error(f"Failed to map slice: {map_err}")
         
+        
+        # Recalculate session scores based on slices to ensure mathematical consistency
+        self._calculate_session_scores(session_analysis)
+
         logger.info(f"Session analysis complete for {session_id}")
         
         # Ingest into cognitive memory for future forensic RAG
@@ -398,7 +421,7 @@ class InterviewAnalyzer:
         filler_count = sum(1 for w in words if w.lower().strip(",.") in fillers)
         # 1 filler every 20 words is normal (5%). More is bad.
         filler_ratio = filler_count / word_count if word_count > 0 else 0
-        confidence = max(30.0, 95.0 - (filler_ratio * 500)) # 10% fillers = -50 points
+        confidence = max(35.0, 95.0 - (filler_ratio * 500)) # 10% fillers = -50 points. Floor changed to 35.0 for debugging.
         
         # 3. Attitude: Simple sentiment lexicon
         pos_words = {'good', 'great', 'excellent', 'positive', 'sure', 'confident', 'happy', 'yes', 'absolutely', 'definitely'}
@@ -649,14 +672,20 @@ Always explain WHY you selected these slices after the tag.
         Looks for 'Score Name: [X]' or 'Score Name: X'
         """
         import re
+        # Log the text being searched for debugging
+        # logger.debug(f"Extracting {score_name} from text: {text[:100]}...") 
+        
         pattern = re.escape(score_name) + r"[:\s]+(?:\[)?(\d+(?:\.\d+)?)(?:\])?"
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             try:
                 val = float(match.group(1))
+                logger.info(f"Extracted {score_name}: {val}")
                 return min(max(val, 0.0), 100.0)
             except ValueError:
                 pass
+        
+        logger.warning(f"Failed to extract {score_name}, defaulting to 50.0. Text snippet: {text[:200] if text else 'Empty'}")
         return 50.0 # Default if parsing fails
 
     def _call_llm(self, prompt: str) -> str:
@@ -721,3 +750,51 @@ Always explain WHY you selected these slices after the tag.
                 section_text.append(line.strip())
                 
         return ' '.join(section_text) if section_text else "Not available"
+
+    def _calculate_session_scores(self, session_analysis: SessionAnalysis):
+        """
+        Recalculate session scores based on weighted average of slice scores.
+        Ensures mathematical consistency and avoids LLM hallucinations.
+        """
+        if not session_analysis.slices:
+            return
+
+        total_fluency = 0.0
+        total_confidence = 0.0
+        total_attitude = 0.0
+        total_score = 0.0
+        count = 0
+
+        for s in session_analysis.slices:
+            # Slices are TimeSliceAnalysis objects
+            fluency = s.fluency if s.fluency is not None else 50.0
+            confidence = s.confidence if s.confidence is not None else 50.0
+            attitude = s.attitude if s.attitude is not None else 50.0
+            score = s.score if s.score is not None else 50.0
+            
+            total_fluency += fluency
+            total_confidence += confidence
+            total_attitude += attitude
+            total_score += score
+            count += 1
+            
+        if count > 0:
+            avg_fluency = total_fluency / count
+            avg_confidence = total_confidence / count
+            avg_attitude = total_attitude / count
+            avg_score = total_score / count
+            
+            # Map back to Session Scores
+            # Integrity = Overall performance consistency (approx. Avg Score)
+            # Confidence = Avg Confidence
+            # Risk = Inverse of Attitude (Higher Attitude -> Lower Risk)
+            
+            session_analysis.confidence_score = round(avg_confidence, 1)
+            session_analysis.integrity_score = round(avg_score, 1) # Use overall score as proxy for integrity/performance
+            
+            # Risk calculation: Base 100 - Attitude. 
+            # If Attitude is 80 (High), Risk is 20 (Low).
+            # If Attitude is 30 (Low), Risk is 70 (High).
+            session_analysis.risk_score = round(max(0.0, 100.0 - avg_attitude), 1)
+            
+            logger.info(f"Recalculated Session Scores from {count} slices: Conf={session_analysis.confidence_score}, Int={session_analysis.integrity_score}, Risk={session_analysis.risk_score}")

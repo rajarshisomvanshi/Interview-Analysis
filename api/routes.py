@@ -55,10 +55,13 @@ import os
 DEBUG_LOG_FILE = "analysis_debug.log"
 
 def log_debug(message):
-    with open(DEBUG_LOG_FILE, "a") as f:
-        f.write(f"{datetime.utcnow()} - {message}\n")
+    try:
+        with open(DEBUG_LOG_FILE, "a") as f:
+            f.write(f"{datetime.utcnow()} - {message}\n")
+    except Exception:
+        pass # Don't block if logging fails
 
-log_debug("API Routes module loaded")
+# Removed import-time log_debug call to prevent hang during server start
 
 # In-memory session status tracking (in production, use Redis or database)
 session_status = {}
@@ -734,34 +737,43 @@ async def list_sessions():
         summaries = []
         
         for sid in session_ids:
-            # Load metadata
-            # We need to implement get_session_metadata in storage or load full data
-            metadata = storage.get_session_metadata(sid)
-            if not metadata:
-                continue
+            try:
+                # Load metadata
+                metadata = storage.get_session_metadata(sid)
+                if not metadata:
+                    continue
 
-            # Use in-memory status if available (more up-to-date)
-            current_status = metadata.status
-            if sid in session_status:
-                current_status = session_status[sid]["status"]
-            elif current_status == "processing":
-                 # If it says processing but not in memory, it was interrupted
-                 current_status = "failed"
+                # Use in-memory status if available (more up-to-date)
+                current_status = metadata.status
+                if sid in session_status:
+                    current_status = session_status[sid]["status"]
+                elif current_status == "processing":
+                     # If it says processing but not in memory, it was interrupted
+                     current_status = "failed"
+                    
+                # Try to load analysis for scores
+                analysis = storage.load_analysis(sid)
                 
-            # Try to load analysis for scores
-            analysis = storage.load_analysis(sid)
-            
-            summary = SessionSummary(
-                session_id=sid,
-                interviewee_name=metadata.interviewee_name,
-                created_at=metadata.created_at,
-                status=current_status,
-                executive_summary=analysis.executive_summary if analysis else None,
-                integrity_score=analysis.integrity_score if analysis and hasattr(analysis, 'integrity_score') else None,
-                confidence_score=analysis.confidence_score if analysis and hasattr(analysis, 'confidence_score') else None,
-                risk_score=analysis.risk_score if analysis and hasattr(analysis, 'risk_score') else None
-            )
-            summaries.append(summary)
+                # Fallback: check session_data if analysis file missing
+                if not analysis:
+                     full_session = storage.load_session_data(sid)
+                     if full_session and full_session.analysis:
+                         analysis = full_session.analysis
+
+                summary = SessionSummary(
+                    session_id=sid,
+                    interviewee_name=metadata.interviewee_name,
+                    created_at=metadata.created_at,
+                    status=current_status,
+                    executive_summary=analysis.executive_summary if analysis else None,
+                    integrity_score=analysis.integrity_score if analysis and hasattr(analysis, 'integrity_score') else None,
+                    confidence_score=analysis.confidence_score if analysis and hasattr(analysis, 'confidence_score') else None,
+                    risk_score=analysis.risk_score if analysis and hasattr(analysis, 'risk_score') else None
+                )
+                summaries.append(summary)
+            except Exception as e:
+                logger.error(f"Error listing session {sid}: {e}")
+                continue
             
         # Sort by date desc
         summaries.sort(key=lambda x: x.created_at, reverse=True)

@@ -7,6 +7,7 @@ Pydantic models for API requests and responses.
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from datetime import datetime
+from core.schemas import QuestionAnswerPair
 
 
 class SessionCreateRequest(BaseModel):
@@ -56,6 +57,7 @@ class AnalysisResultsResponse(BaseModel):
     risk_score: Optional[float] = Field(None, description="0-100 Risk Score")
     download_url: Optional[str] = Field(None, description="URL to download full results JSON")
     slices: Optional[List[TimeSliceResponse]] = Field(None, description="List of time slices")
+    qa_pairs: Optional[List[QuestionAnswerPair]] = Field(None, description="List of Q&A pairs associated with the session")
 
 
 class TimelineDataResponse(BaseModel):
@@ -75,6 +77,16 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """Response from chatbot"""
     response: str = Field(..., description="LLM response")
+
+
+class TranslationRequest(BaseModel):
+    """Request to translate text"""
+    text: str = Field(..., description="Text to translate")
+    target_language: str = Field(default="Hindi", description="Target language")
+    
+class TranslationResponse(BaseModel):
+    """Response from translation"""
+    translated_text: str = Field(..., description="Translated text")
 
 
 class SessionSummary(BaseModel):

@@ -1,15 +1,41 @@
+
+# Use an official Python runtime as a parent image
+# Using slim version to reduce size, but full version might be safer for complex deps
 FROM python:3.10-slim
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set work directory
 WORKDIR /app
 
+# Install system dependencies
+# ffmpeg: for audio processing
+# libgl1-mesa-glx: for OpenCV
+# build-essential: for compiling some python extensions
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file (if you have one, otherwise we'll install manually or assume poetry)
+# Assuming requirements.txt exists at root or we create one
 COPY requirements.txt .
+
+# Install dependencies
+# Upgrade pip first
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install MinerU/Magic-PDF dependencies if needed for full features, 
-# but for now we stick to the requirements.txt which has pymupdf
-# If MinerU is strictly required, we'd need more system deps.
-# Based on plan, we use Dextora OCR (API) + PyMuPDF fallback, so slim is fine.
-
+# Copy the rest of the application
 COPY . .
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "2000"]
+# Expose the API port
+EXPOSE 8000
+
+# Command to run the application
+CMD ["python", "main.py", "server"]

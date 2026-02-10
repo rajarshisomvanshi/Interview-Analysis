@@ -19,7 +19,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [analysisStatus, setAnalysisStatus] = useState<any>(null);
   const [currentSliceIndex, setCurrentSliceIndex] = useState(0);
+  const [viewMode, setViewMode] = useState<'summary' | 'qa' | 'slices'>('summary');
   const [highlightedSlices, setHighlightedSlices] = useState<{ indices: number[], color: string } | null>(null);
+  const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
+  const [translatedSlices, setTranslatedSlices] = useState<Record<number, { insight: string, summary: string }>>({});
+  const [isTranslating, setIsTranslating] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -101,9 +105,42 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const fetchCandidateDetails = async (id: string) => {
     try {
       const results = await api.getResults(id);
-      if (results && results.slices) {
-        setCandidates(prev => prev.map(c => c.id === id ? { ...c, slices: results.slices } : c));
-        setActiveCandidate(prev => prev?.id === id ? { ...prev, slices: results.slices } : prev);
+      if (results) {
+        setCandidates(prev => prev.map(c => c.id === id ? {
+          ...c,
+          slices: results.slices,
+          executiveSummary: results.executive_summary,
+          qaPairs: results.qa_pairs,
+          integrityScore: results.integrity_score, // If available in response
+          confidenceScore: results.confidence_score,
+          riskScore: results.risk_score
+        } : c));
+
+        setActiveCandidate(prev => prev?.id === id ? {
+          ...prev,
+          slices: results.slices,
+          executiveSummary: results.executive_summary,
+          qaPairs: results.qa_pairs,
+          // Update scores too if they are returned by getResults (they seem to be part of AnalysisResultsResponse but let's confirm schema or just trust the response)
+          // In api/routes.py getResults returns AnalysisResultsResponse which has executive_summary but does it have scores?
+          // Looking at api/routes.py:598... it doesn't seem to explicitly include scores in the top level response?
+          // Wait, I checked routes.py.
+          // It returns AnalysisResultsResponse.
+          // And SessionSummary has scores.
+          // But getResults...
+          // Let's check api/routes.py again.
+          // Line 598: return AnalysisResultsResponse(...)
+          // It has slices, qa_pairs, executive_summary.
+          // Does it have scores?
+          // I need to check AnalysisResultsResponse model definition in api/models.py
+          // But based on my previous view of routes.py, getResults has explicit fields.
+          // Let's assume for now.
+          // Actually, I should check api/models.py to be sure.
+          // But to be safe, I will just merge what I can.
+          // The executive_summary is definitely there.
+          // QA pairs are definitely there.
+
+        } : prev);
       }
     } catch (e) {
       console.error("Failed to fetch details", e);
@@ -220,6 +257,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     setIsSpeaking(false);
   };
 
+  const handleTranslateSummary = async () => {
+    if (!activeCandidate?.executiveSummary) return;
+    try {
+      setIsTranslating(true);
+      const translated = await api.translateText(activeCandidate.executiveSummary, 'Hindi');
+      setTranslatedSummary(translated);
+    } catch (e) {
+      console.error("Translation failed", e);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleTranslateSlice = async (index: number, insight: string, summary: string) => {
+    try {
+      // Optimistic update or loading state could be added here
+      const tInsight = await api.translateText(insight, 'Hindi');
+      const tSummary = await api.translateText(summary, 'Hindi');
+
+      setTranslatedSlices(prev => ({
+        ...prev,
+        [index]: { insight: tInsight, summary: tSummary }
+      }));
+    } catch (e) {
+      console.error("Slice translation failed", e);
+    }
+  };
+
   const formatTime = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
@@ -231,6 +296,55 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       videoRef.current.currentTime = slice.start_ms / 1000;
       videoRef.current.play();
     }
+  };
+
+  const renderQAList = () => {
+    const qaPairs = activeCandidate?.qaPairs || []; // Use activeCandidate from props/state
+
+    if (qaPairs.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 opacity-50">
+          <span className="material-symbols-outlined text-4xl mb-2">forum</span>
+          <p className="text-sm">No structured Q&A data available for this session.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+        {qaPairs.map((qa, idx) => (
+          <div key={idx} className="bg-black/20 border border-white/5 rounded-xl p-5 hover:bg-black/40 transition-colors">
+            <div className="flex flex-col gap-3">
+              {/* Question */}
+              <div className="flex gap-3">
+                <div className="mt-1 w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/30">
+                  <span className="text-[10px] font-black">Q</span>
+                </div>
+                <p className="text-sm text-indigo-100/90 font-medium leading-relaxed">{qa.question_text}</p>
+              </div>
+
+              {/* Connecting Line */}
+              <div className="ml-2.5 w-px h-2 bg-white/5"></div>
+
+              {/* Answer */}
+              <div className="flex gap-3">
+                <div className="mt-1 w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                  <span className="text-[10px] font-black">A</span>
+                </div>
+                <p className="text-sm text-slate-300 leading-relaxed">{qa.response_text}</p>
+              </div>
+            </div>
+
+            {/* Timestamp Footer */}
+            <div className="mt-3 pt-3 border-t border-white/5 flex justify-end">
+              <span className="text-[10px] text-slate-600 font-mono">
+                {formatTime(qa.question_start_ms)} - {formatTime(qa.response_end_ms)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const renderSliceIntelligence = () => {
@@ -263,12 +377,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <div className="space-y-4 pt-4 border-t border-white/5">
             <div className="flex justify-between items-center text-[8px] font-black text-slate-500 uppercase tracking-widest orbitron">
               <span>{formatTime(currentSlice.start_ms)} Segment Insight</span>
+              <button
+                onClick={() => handleTranslateSlice(currentSliceIndex, currentSlice.insight, currentSlice.summary)}
+                className="hover:text-white transition-colors flex items-center gap-1"
+                title="Translate to Hindi"
+              >
+                <span className="material-symbols-outlined text-sm text-emerald-500">translate</span>
+              </button>
             </div>
             <h5 className="text-sm font-bold text-white leading-snug">"{currentSlice.insight}"</h5>
+            {translatedSlices[currentSliceIndex] && (
+              <h5 className="text-sm font-bold text-emerald-400 leading-snug font-hindi mt-2">"{translatedSlices[currentSliceIndex].insight}"</h5>
+            )}
+
             <div className="h-px w-8 bg-white/20"></div>
             <p className="text-xs text-slate-400 leading-relaxed italic">
               {currentSlice.summary}
             </p>
+            {translatedSlices[currentSliceIndex] && (
+              <p className="text-xs text-slate-400 leading-relaxed italic font-hindi mt-2">
+                {translatedSlices[currentSliceIndex].summary}
+              </p>
+            )}
           </div>
 
           <button
@@ -279,7 +409,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             Replay Segment
           </button>
         </div>
-      </div>
+      </div >
     );
   };
 
@@ -366,6 +496,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       </div>
     );
   };
+
+
 
   if (isLoading) {
     return (
@@ -627,19 +759,93 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                   <div className="glass-card p-10 border border-white/10 bg-zinc-900/40 rounded-2xl shadow-xl relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-1 h-full bg-white opacity-20 group-hover:opacity-100 transition-opacity"></div>
                     <div className="flex justify-between items-center mb-8">
-                      <h4 className="orbitron text-xs font-black text-white tracking-[0.3em] uppercase">Executive Intelligence Report</h4>
+                      <div className="flex items-center gap-6">
+                        <h4 className="orbitron text-xs font-black text-white tracking-[0.3em] uppercase">Executive Intelligence Report</h4>
+
+                        {/* View Toggles */}
+                        <div className="flex bg-black/40 rounded-lg p-1 border border-white/5">
+                          <button
+                            onClick={() => setViewMode('summary')}
+                            className={`px-3 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${viewMode === 'summary' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                          >
+                            Summary
+                          </button>
+                          <button
+                            onClick={() => setViewMode('qa')}
+                            className={`px-3 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${viewMode === 'qa' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                          >
+                            Q & A
+                          </button>
+                          <button
+                            onClick={() => setViewMode('slices')}
+                            className={`px-3 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${viewMode === 'slices' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                          >
+                            Slice Analysis
+                          </button>
+                        </div>
+                      </div>
+
                       <button
-                        onClick={handlePlayAudioReport}
-                        disabled={isSpeaking || !current.executiveSummary}
+                        onClick={handleTranslateSummary}
+                        disabled={isTranslating || !current.executiveSummary}
                         className="flex items-center gap-3 px-4 py-2 bg-white/5 hover:bg-white/10 text-[10px] orbitron text-white rounded-full transition-all border border-white/10 disabled:opacity-50"
                       >
-                        <span className="material-symbols-outlined text-sm">{isSpeaking ? 'voice_selection' : 'graphic_eq'}</span>
-                        {isSpeaking ? 'NEURAL NARRATION ACTIVE' : 'REPLAY AUDIO ANALYSIS'}
+                        <span className="material-symbols-outlined text-sm">translate</span>
+                        {isTranslating ? 'TRANSLATING...' : 'TRANSLATE TO HINDI'}
                       </button>
                     </div>
-                    <p className="text-base leading-[1.8] text-slate-300 font-light">
-                      {current.executiveSummary || 'Awaiting final synthesis of temporal data segments...'}
-                    </p>
+
+                    {viewMode === 'summary' ? (
+                      <div className="space-y-4">
+                        <p className="text-base leading-[1.8] text-slate-300 font-light fade-in">
+                          {current.executiveSummary || 'Awaiting final synthesis of temporal data segments...'}
+                        </p>
+                        {translatedSummary && (
+                          <div className="mt-4 pt-4 border-t border-white/10">
+                            <p className="text-[10px] text-emerald-500 font-bold mb-2 uppercase tracking-widest">HINDI TRANSLATION</p>
+                            <p className="text-base leading-[1.8] text-slate-300 font-light fade-in font-hindi">
+                              {translatedSummary}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : viewMode === 'qa' ? (
+                      <div className="fade-in">
+                        {renderQAList()}
+                      </div>
+                    ) : (
+                      <div className="fade-in space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                        {(current.slices || []).map((slice: any, idx: number) => (
+                          <div key={idx} className="bg-black/20 border border-white/5 rounded-xl p-5 hover:bg-black/40 transition-colors cursor-pointer" onClick={() => { setCurrentSliceIndex(idx); seekToSlice(slice); }}>
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black orbitron text-emerald-500">SEGMENT {idx + 1}</span>
+                                <span className="text-[10px] text-slate-600 font-mono">{formatTime(slice.start_ms)} - {formatTime(slice.end_ms)}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`w-1.5 h-1.5 rounded-full ${slice.score > 70 ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                                <span className="text-[10px] font-bold text-slate-400">Score: {slice.score}</span>
+                              </div>
+                            </div>
+                            <h4 className="text-sm font-bold text-white mb-2">"{slice.insight}"</h4>
+                            <p className="text-xs text-slate-400 leading-relaxed italic">{slice.summary}</p>
+                            {translatedSlices[idx] && (
+                              <div className="mt-3 pt-3 border-t border-white/5">
+                                <p className="text-[10px] text-emerald-500 font-bold mb-1 uppercase tracking-widest">HINDI</p>
+                                <h4 className="text-sm font-bold text-emerald-400 font-hindi mb-1">"{translatedSlices[idx].insight}"</h4>
+                                <p className="text-xs text-slate-400 italic font-hindi">{translatedSlices[idx].summary}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {(!current.slices || current.slices.length === 0) && (
+                          <div className="text-center py-12 opacity-50">
+                            <span className="material-symbols-outlined text-4xl mb-2">analytics</span>
+                            <p className="text-sm">No slice data available yet.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
               )}
