@@ -138,11 +138,11 @@ class Settings(BaseSettings):
     # ========================================================================
     
     llm_provider: Literal["openai", "anthropic", "ollama"] = Field(
-        default="openai",
+        default="ollama",
         description="LLM provider for analysis"
     )
     llm_model: str = Field(
-        default="gpt-4",
+        default="qwen2.5:1.5b",
         description="LLM model name"
     )
     llm_temperature: float = Field(

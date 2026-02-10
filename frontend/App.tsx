@@ -19,7 +19,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black font-display cursor-none">
+    <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black font-display">
       <MouseSpotlight />
       <Navbar currentView={currentView} onNavigate={navigateTo} />
 

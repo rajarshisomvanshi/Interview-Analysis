@@ -29,7 +29,8 @@ from api.models import (
     ForensicSignal,
     ForensicEvent,
     TranslationRequest,
-    TranslationResponse
+    TranslationResponse,
+    TimeSliceResponse
 )
 from core.schemas import SessionMetadata, SessionData, PersonIdentity, TimeSliceAnalysis, SessionAnalysis
 from core.storage import storage
@@ -44,6 +45,7 @@ from reasoning.analyzer import InterviewAnalyzer
 from utils.video_utils import VideoUtils
 from vision.clustering import FaceClusterer
 from utils.report_generator import InterviewReportGenerator
+from reasoning.master_report_generator import MasterReportGenerator
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -506,6 +508,23 @@ def run_analysis(session_id: str):
         report_gen = InterviewReportGenerator(session_data)
         report_path = settings.get_session_dir(session_id) / "analysis_report.md"
         report_gen.save_report(report_path)
+        
+        # Step 8: Generate Master Report
+        try:
+            session_status[session_id]["current_step"] = "Generating master report"
+            master_gen = MasterReportGenerator()
+            slice_file = settings.get_session_dir(session_id) / "2-minute-slices.txt"
+            master_report_path = settings.get_session_dir(session_id) / "master_report.md"
+            
+            if slice_file.exists():
+                master_gen.generate_master_report(
+                    session_id=session_id,
+                    candidate_name=session_data.metadata.interviewee_name or "Candidate",
+                    slice_file_path=slice_file,
+                    output_path=master_report_path
+                )
+        except Exception as e:
+            logger.error(f"Master report generation failed: {e}")
         
         # Complete
         final_slices = [s.model_dump() for s in analysis.slices] if hasattr(analysis, 'slices') and analysis.slices else []

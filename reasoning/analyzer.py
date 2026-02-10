@@ -171,7 +171,7 @@ class InterviewAnalyzer:
                 context_text = f"Key Insights per Question:\n{qa_summaries}"
             elif transcript_segments:
                 # Fallback to raw transcript text
-                full_transcript = "\n".join([f"{s.get('speaker', 'Unknown')}: {s.get('text', '')}" for s in transcript_segments])
+                full_transcript = "\n".join([f"{s.get('speaker', 'Unknown') if isinstance(s, dict) else s.speaker}: {s.get('text', '') if isinstance(s, dict) else s.text}" for s in transcript_segments])
                 # Truncate if too long (approx 4000 chars for safety)
                 if len(full_transcript) > 8000:
                     full_transcript = full_transcript[:8000] + "...(truncated)"
@@ -460,10 +460,10 @@ class InterviewAnalyzer:
         # Using [Start-End] Speaker: Text format
         formatted_transcript = []
         for s in transcript_segments:
-            start = s.get('timestamp_ms', 0)
-            end = s.get('end_ms', start + 1000)
-            speaker = s.get('speaker_id', 'Unknown')
-            text = s.get('text', '')
+            start = s.get('timestamp_ms', 0) if isinstance(s, dict) else s.timestamp_ms
+            end = s.get('end_ms', start + 1000) if isinstance(s, dict) else s.end_ms
+            speaker = s.get('speaker_id', 'Unknown') if isinstance(s, dict) else s.speaker_id
+            text = s.get('text', '') if isinstance(s, dict) else s.text
             formatted_transcript.append(f"[{start}-{end}] {speaker}: {text}")
             
         full_text = "\n".join(formatted_transcript)
