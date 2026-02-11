@@ -20,7 +20,9 @@ class LocalLLMAnalyzer:
         """Initialize local LLM"""
         self.model = settings.local_llm_model
         self.base_url = settings.ollama_base_url
+        self.max_tokens = settings.llm_max_tokens
         
+        # print(f"DEBUG: LocalLLMAnalyzer - Initializing with model={self.model} at {self.base_url}")
         logger.info(f"Initializing Local LLM ({self.model}) via Ollama at {self.base_url}...")
         
         try:
@@ -40,9 +42,13 @@ class LocalLLMAnalyzer:
                 # Fallback to first available if specific model missing, or let it fail?
                 # For now, just warn. Ollama might auto-pull or generic error.
             
+            # print(f"DEBUG: LocalLLMAnalyzer - Initialization successful.")
             logger.info("Local LLM initialized successfully.")
             
         except Exception as e:
+            # print(f"DEBUG: LocalLLMAnalyzer - Initialization FAILED: {e}")
+            import traceback
+            traceback.print_exc()
             logger.error(f"Failed to initialize Local LLM: {e}")
             self.client = None
             raise
@@ -99,30 +105,68 @@ TRANSCRIPT (Spoken Dialogue):
 "{transcript}"
 
 TASK:
-1. First, Describe the scene based on the Visual Context (e.g., "The candidate is wearing [Attire] in [Room Type] with [Occupancy]").
-2. Then, Reconstruct the dialogue in a Q&A format. Based on the text, identify who is the Interviewer and who is the Candidate.
-   - If the transcript is in a non-English language (e.g., Hindi), you may quote the original text but provide the analysis in English.
-   Format as:
-   **Interviewer**: [Question]
-   **Candidate**: [Response]
-   (If specific speakers are unclear, summarize the topic discussed).
-3. Finally, Analyze the candidate's behavior. Are they nervous (high blink rate, low eye contact)? Are they confident?
+1. Scoring: Provide scores from 0-100 based on the analysis.
+   - Fluency: Smoothness of speech.
+   - Confidence: Certainty and demeanor.
+   - Attitude: Positivity and engagement.
+2. Scene Description: Briefly describe the setting and attire.
+3. Dialogue Reconstruction: Convert the transcript into a clean Q&A format (Interviewer vs Candidate).
+4. Behavioral Analysis: Analyze the candidate's performance.
+
+OUTPUT FORMAT:
+**Scores:**
+Fluency: [Score]
+Confidence: [Score]
+Attitude: [Score]
+
+**Scene Description:**
+[Description]
+
+**Reconstructed Dialogue (Q&A Format):**
+**Interviewer**: [Question]
+**Candidate**: [Answer]
+
+**Behavioral Analysis:**
+[Analysis]
 
 Output a concise but detailed analysis. Do not hallucinate information not present in signals or transcript.
+IMPORTANT: You MUST start your response with the **Scores:** section. Do not start with Scene Description.
+
+EXAMPLE OUTPUT:
+**Scores:**
+Fluency: 85
+Confidence: 78
+Attitude: 90
+
+**Scene Description:**
+The candidate is seated in a well-lit room...
+
+**Reconstructed Dialogue (Q&A Format):**
+**Interviewer**: Tell me about yourself.
+**Candidate**: certainly. I am a software engineer...
+
+**Behavioral Analysis:**
+The candidate displayed good eye contact...
 """
+        
+        # print(f"DEBUG: Prompt sent to LLM:\n{prompt}")
         
         # Generate
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant for analyzing interview videos. You are precise and observational."},
+                    {"role": "system", "content": "You are a strict analysis assistant. You MUST follow the output format exactly, starting with Scores."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=self.max_tokens if hasattr(self, 'max_tokens') else 400,
                 temperature=0.3,
             )
-            return response.choices[0].message.content.strip()
+            content = response.choices[0].message.content.strip()
+            # print(f"DEBUG: LocalLLMAnalyzer - Generated content length: {len(content)}")
+            # if not content:
+            #      print("DEBUG: LocalLLMAnalyzer - Content is EMPTY!")
+            return content
         except Exception as e:
             logger.error(f"Generation failed: {e}")
             return f"Analysis failed: {e}"

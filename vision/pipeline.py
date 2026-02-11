@@ -91,34 +91,22 @@ class VisionPipeline:
     
     def __init__(self):
         """Initialize vision pipeline"""
+        logger.info("Initializing PhoneVideoDetector...")
         self.phone_detector = PhoneVideoDetector()
+        
+        logger.info("Initializing CCTVDetector...")
         self.cctv_detector = CCTVDetector()
+        
+        logger.info("Initializing FacialAnalyzer...")
         self.facial_analyzer = FacialAnalyzer()
+        
+        logger.info("Initializing BodyMovementAnalyzer...")
         self.body_analyzer = BodyMovementAnalyzer()
+        
+        logger.info("Initializing FaceClusterer...")
         self.face_clusterer = FaceClusterer()
         
         self.transcriber = None
-        
-        logger.info("Initializing PhoneVideoDetector...")
-        self.phone_detector = PhoneVideoDetector()
-        logger.info("PhoneVideoDetector initialized.")
-
-        logger.info("Initializing CCTVDetector...")
-        self.cctv_detector = CCTVDetector()
-        logger.info("CCTVDetector initialized.")
-
-        logger.info("Initializing FacialAnalyzer...")
-        self.facial_analyzer = FacialAnalyzer()
-        logger.info("FacialAnalyzer initialized.")
-
-        logger.info("Initializing BodyMovementAnalyzer...")
-        self.body_analyzer = BodyMovementAnalyzer()
-        logger.info("BodyMovementAnalyzer initialized.")
-
-        logger.info("Initializing FaceClusterer...")
-        self.face_clusterer = FaceClusterer()
-        logger.info("FaceClusterer initialized.")
-
         logger.info("Initializing Transcriber...")
         try:
             self.transcriber = Transcriber()
@@ -126,14 +114,18 @@ class VisionPipeline:
         except Exception as e:
             logger.error(f"Failed to initialize Transcriber: {e}")
         
-        self.local_llm = None
         if settings.use_local_llm:
             try:
+                # with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Initializing LocalLLMAnalyzer...\n")
                 logger.info("Initializing LocalLLMAnalyzer...")
                 self.local_llm = LocalLLMAnalyzer()
+                # with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - LocalLLMAnalyzer initialized successfully.\n")
                 logger.info("LocalLLMAnalyzer initialized successfully.")
             except Exception as e:
+                with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Failed to initialize Local LLM: {e}\n")
                 logger.error(f"Failed to initialize Local LLM: {e}")
+        else:
+            with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - use_local_llm is False\n")
         
         logger.info("Initialized VisionPipeline")
         
@@ -154,10 +146,15 @@ class VisionPipeline:
             List of FaceSignal objects
         """
         logger.info(f"Processing phone video: {video_path}")
+        # with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Starting process_phone_video for {video_path}\n")
+        
+        # Step 1: Cluster faces to identify interviewee vs interviewer
         
         # Step 1: Cluster faces to identify interviewee vs interviewer
         # This is a pre-pass to lock identities
         identities = self.face_clusterer.process_video_for_clustering(str(video_path))
+        # with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Clustering complete. Identities found: {len(identities)}\n")
+        
         roles = self.face_clusterer.auto_assign_roles(identities) # Cluster ID -> IdentityData
         
         # Identify which cluster IDs correspond to which roles
@@ -174,6 +171,15 @@ class VisionPipeline:
         
         with VideoReader(video_path, target_fps=settings.video_fps) as reader:
             for frame, timestamp_ms in reader.read_frames():
+                # if timestamp_ms > 0 and timestamp_ms % 5000 == 0:
+                #      with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Processing frame at {timestamp_ms}ms\n")
+                
+                # Process every 3rd frame (effective 10 FPS processing)
+                if getattr(self, '_frame_counter', 0) % 3 != 0:
+                     self._frame_counter = getattr(self, '_frame_counter', 0) + 1
+                     continue
+                self._frame_counter = getattr(self, '_frame_counter', 0) + 1
+
                 # Detect all faces
                 detection = self.phone_detector.detect_faces(frame)
                 
@@ -350,6 +356,9 @@ class VisionPipeline:
             }
             logger.info(f"Generating description with Local LLM (Language: {detected_language})...")
             description = self.local_llm.generate_description(signals_dict)
+            # with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Generated description length: {len(description)}\n")
+            # if not description:
+            #      with open("pipeline_debug.log", "a") as f: f.write("DEBUG: VisionPipeline - Description is EMPTY\n")
         
         print(f"\n{'='*50}")
         print(f" INTERIM ANALYSIS: {last_ts/60000:.1f}m - {current_ts/60000:.1f}m")
@@ -398,8 +407,42 @@ class VisionPipeline:
         dialogue = None
         behavioral = None
         
+        # Default scores (neutral fallback)
+        llm_fluency = 75.0
+        llm_confidence = 75.0
+        llm_attitude = 75.0
+        score_source = "vision_fallback"
+
         if description:
             try:
+                # Parse Scores (Robust)
+                import re
+                
+                # Search entire description for scores, handling various formats:
+                # - Fluency: 85
+                # - **Fluency**: 85
+                # - **Fluency:** 85
+                # - Fluency - 85
+                
+                # Check for Fluency
+                f_match = re.search(r"Fluency\D{0,10}(\d{1,3})", description, re.IGNORECASE)
+                if f_match: 
+                    llm_fluency = float(f_match.group(1))
+                    score_source = "llm"
+
+                # Check for Confidence
+                c_match = re.search(r"Confidence\D{0,10}(\d{1,3})", description, re.IGNORECASE)
+                if c_match: 
+                    llm_confidence = float(c_match.group(1))
+                    score_source = "llm"
+                    
+                # Check for Attitude
+                a_match = re.search(r"Attitude\D{0,10}(\d{1,3})", description, re.IGNORECASE)
+                if a_match: 
+                    llm_attitude = float(a_match.group(1))
+                    score_source = "llm"
+
+                # Parse Sections
                 if "**Scene Description:**" in description:
                    parts = description.split("**Scene Description:**")[1]
                    scene_desc = parts.split("**Reconstructed Dialogue")[0].strip()
@@ -408,32 +451,33 @@ class VisionPipeline:
                    parts = description.split("**Reconstructed Dialogue")[1]
                    if "(Q&A Format):**" in parts:
                         parts = parts.split("(Q&A Format):**")[1]
+                   elif "**" in parts: # Handle variations
+                        parts = parts.split("**")[1]
                    dialogue = parts.split("**Behavioral Analysis:**")[0].strip()
                    
                 if "**Behavioral Analysis:**" in description:
-                   behavioral = description.split("**Behavioral Analysis:**")[1].strip()
+                   parts = description.split("**Behavioral Analysis:**")[1]
+                   behavioral = parts.strip()
+                    
             except Exception as e:
                 logger.warning(f"Failed to parse LLM description: {e}")
 
-        # Calculate baseline score from vision signals
-        # Eye contact (0-1) maps to 40-90
-        vision_score = max(40.0, min(95.0, (avg_eye_contact * 50) + 40))
-        # Blink rate adjustment (normal 15-20 bpm)
-        if blink_rate > 30 or blink_rate < 5:
-            vision_score -= 10
+        # Final Score Calculation (Weighted Average of LLM Scores)
+        # 40% Confidence, 30% Fluency, 30% Attitude
+        final_score = round((llm_confidence * 0.4) + (llm_fluency * 0.3) + (llm_attitude * 0.3), 1)
             
         slice_analysis = TimeSliceAnalysis(
             start_ms=int(last_ts),
             end_ms=int(current_ts),
-            insight=description[:100] + "..." if description else "Analysis pending...",
-            summary=description or "No analysis generated.",
+            insight=description[:100] + "..." if description else "Analysis taking place...",
+            summary=description or "Processing behavioral signals...",
             scene_description=scene_desc,
             dialogue=dialogue,
             behavioral_analysis=behavioral,
-            score=round(vision_score, 1),
-            fluency=round(vision_score + 2, 1), # Placeholder until transcript
-            confidence=round(vision_score - 2, 1),
-            attitude=80.0
+            score=final_score,
+            fluency=llm_fluency, 
+            confidence=llm_confidence,
+            attitude=llm_attitude
         )
         
         # Invoke callback if provided

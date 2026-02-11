@@ -152,7 +152,7 @@ class Settings(BaseSettings):
         description="LLM temperature for generation"
     )
     llm_max_tokens: int = Field(
-        default=1000,
+        default=2000,
         ge=100,
         description="Maximum tokens for LLM response"
     )
