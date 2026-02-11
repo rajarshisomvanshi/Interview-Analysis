@@ -1,57 +1,30 @@
-# Changes Log
+# Changelog
 
-This document summarizes the changes made to the codebase to fix the missing/truncated LLM scores issue.
+All notable changes to the `UPSC-interview` branch.
 
-## 1. Configuration Changes
+## [Unreleased]
 
-### `config/settings.py`
+### Added
+- **Master Report Generation:** Implemented comprehensive report generation analyzing interim slices, Q&A, and behavioral patterns.
+- **CHANGELOG.md:** Added this file to track project history.
 
-- **Increased Token Limit:**
-  - Modified `llm_max_tokens` from `1000` to `2000` to prevent LLM response truncation for longer transcripts.
-  
-  ```python
-  llm_max_tokens: int = Field(
-      default=2000,
-      ge=100,
-      description="Maximum tokens for LLM response"
-  )
-  ```
+### Fixed
+- **LLM Scoring Truncation:**
+    - Increased `llm_max_tokens` to 2000 in `config/settings.py`.
+    - Reordered `LocalLLMAnalyzer` prompt to prioritize "Scoring" section.
+    - Enforced strict output formatting via system prompts.
+    - Implemented robust regex-based score parsing in `vision/pipeline.py` to handle varied model outputs.
+- **Face Clustering Integration:**
+    - Integrated face clustering into `VisionPipeline` to reliably distinguish between Interviewer and Candidate.
+    - Added identity locking to prevent role swapping during analysis.
+- **Analysis Status Reporting:**
+    - Fixed the "Analysis Pending" issue where the frontend would not show progress.
+    - Corrected status calculation logic in the backend to accurately reflect "processing", "completed", or "failed" states.
+- **API Routes:**
+    - Fixed API route registration in `api/main.py` to ensure all endpoints (including `/sessions`) are correctly mounted and accessible.
+- **Import Deadlocks:**
+    - Resolved circular import issues that were causing the server to hang on startup.
 
-## 2. Prompt Engineering Changes
-
-### `reasoning/local_llm.py`
-
-- **Prioritized Scoring Task:**
-  - Reordered the `TASK` list in the prompt to place "1. Scoring" at the top. This encourages the LLM to generate scores first, reducing the risk of truncation.
-  
-- **Strict Formatting Instructions:**
-  - Added explicit instructions: `IMPORTANT: You MUST start your response with the **Scores:** section.`
-  - Added a one-shot `EXAMPLE OUTPUT` demonstrating the required format with `**Scores:**` as the first section.
-  
-- **System Message update:**
-  - Updated the system prompt to enforce strict adherence to the output format.
-  
-  ```python
-  messages=[
-      {"role": "system", "content": "You are a strict analysis assistant. You MUST follow the output format exactly, starting with Scores."},
-      {"role": "user", "content": prompt}
-  ],
-  ```
-
-## 3. Robust Parsing Logic
-
-### `vision/pipeline.py`
-
-- **Flexible Score Extraction:**
-  - Updated the score parsing logic in `_print_interim_analysis` (lines ~415-430) to be robust against formatting variations.
-  - Instead of relying on strict section splitting (e.g., `split("**Scene Description:**")`), the new logic uses regular expressions to search the *entire* response for score patterns (`Fluency: 85`, `**Fluency**: 85`, etc.).
-  
-  ```python
-  # Check for Fluency
-  f_match = re.search(r"Fluency\D{0,10}(\d{1,3})", description, re.IGNORECASE)
-  if f_match: 
-      llm_fluency = float(f_match.group(1))
-      score_source = "llm"
-  ```
-  
-These changes ensure that even if the LLM deviates slightly from the requested format or gets truncated *after* the scores (due to local limits), the critical scoring information is successfully extracted and utilized.
+### Changed
+- **Prompt Engineering:** Optimized `LocalLLMAnalyzer` prompts for better compliance with JSON/structured output requirements.
+- **Logging:** Enhanced debug logging for pipeline and LLM interaction (subsequently cleaned up for production).
