@@ -177,7 +177,6 @@ async def upload_single_file(session_id: str, file: UploadFile = File(...)):
         storage.save_session_data(session_data)
         
     logger.info(f"Uploaded source video for session {session_id}")
-    logger.info(f"Uploaded source video for session {session_id}")
     return {"status": "uploaded", "path": str(source_video_path)}
 
 
@@ -623,6 +622,9 @@ async def get_analysis_results(session_id: str):
         question_count=len(analysis.question_analyses),
         session_duration_ms=session_data.metadata.duration_ms or 0,
         executive_summary=analysis.executive_summary,
+        integrity_score=analysis.integrity_score if hasattr(analysis, "integrity_score") else None,
+        confidence_score=analysis.confidence_score if hasattr(analysis, "confidence_score") else None,
+        risk_score=analysis.risk_score if hasattr(analysis, "risk_score") else None,
         download_url=f"/sessions/{session_id}/download/analysis",
         slices=[
             TimeSliceResponse(
