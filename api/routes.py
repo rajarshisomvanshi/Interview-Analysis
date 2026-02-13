@@ -343,26 +343,30 @@ def run_analysis(session_id: str):
             )
         else:
             # Single video flow (face only for now, unless we want to run both on same video)
-            # Run face clustering here first
-            session_status[session_id]["current_step"] = "Clustering faces"
-            clusterer = FaceClusterer()
-            identities = clusterer.process_video_for_clustering(str(phone_video_path))
-            identities = clusterer.auto_assign_roles(identities)
-            
-            # Save identities to metadata
-            converted_identities = {}
-            for pid, data in identities.items():
-                converted_identities[pid] = PersonIdentity(
-                    id=data.id, 
-                    role=data.role, 
-                    num_appearances=data.num_appearances
-                )
-            session_data.metadata.identities = converted_identities
-            storage.save_session_data(session_data)
-            
-            # Determine which Face Signal aligns with Interviewee
-            interviewee_id = next((pid for pid, p in converted_identities.items() if p.role == 'interviewee'), None)
-            session_data.metadata.interviewee_identity_id = interviewee_id
+            if phone_video_path and phone_video_path.exists():
+                log_debug(f"Skipping Face Recognition (Clustering) for {session_id} as per pipeline optimization.")
+                if session_id in session_status:
+                    session_status[session_id]["current_step"] = "Using default identities (Skip Clustering)"
+                
+                # Use default identity for candidate
+                converted_identities = {
+                    "person_0": PersonIdentity(
+                        id="person_0",
+                        role="Candidate",
+                        num_appearances=1,
+                        thumbnail_url=None
+                    )
+                }
+                session_data.metadata.identities = converted_identities
+                session_data.metadata.interviewee_identity_id = "person_0"
+                storage.save_session_data(session_data)
+                
+                # Update in-memory status with identities for early UI update
+                if session_id in session_status:
+                    session_status[session_id]["identities"] = {
+                        "person_0": {"id": "person_0", "role": "Candidate", "thumbnail_url": None} 
+                    }
+                log_debug(f"Face Recognition bypassed for {session_id}. Using default identities.")
             
             # Define callback for interim results
             def save_interim_slice(slice_analysis: TimeSliceAnalysis):
@@ -764,10 +768,18 @@ async def list_sessions():
                 if not metadata:
                     continue
 
+                analysis = None  # Initialize before branching
+
                 # Use in-memory status if available (more up-to-date)
                 current_status = metadata.status
                 if sid in session_status:
                     current_status = session_status[sid]["status"]
+                    # Still load analysis for scores even when status is in memory
+                    analysis = storage.load_analysis(sid)
+                    if not analysis:
+                        full_session = storage.load_session_data(sid)
+                        if full_session and full_session.analysis:
+                            analysis = full_session.analysis
                 elif current_status == "processing":
                      # If it says processing but not in memory, it was interrupted
                      current_status = "failed"

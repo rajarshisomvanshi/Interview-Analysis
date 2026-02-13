@@ -45,8 +45,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
             // If completed, reload full data to get final scores
             if (status.status === 'completed' || status.status === 'failed') {
-              // Wait a moment then reload
-              setTimeout(() => loadSessions(), 1000);
+              clearInterval(interval);
+              // Update the active candidate's status locally so the details fetcher triggers
+              setActiveCandidate(prev => prev && prev.id === activeCandidate.id ? { ...prev, status: status.status } : prev);
+              loadSessions(); // Reload sidebar
+
+              // Fetch full details immediately for the active one
+              fetchCandidateDetails(activeCandidate.id);
             }
           }
         } catch (e) {
@@ -88,7 +93,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         fetchCandidateDetails(activeCandidate.id);
       }
     }
-  }, [activeCandidate?.id]);
+  }, [activeCandidate?.id, activeCandidate?.status]);
 
   const loadSessions = async () => {
     try {
