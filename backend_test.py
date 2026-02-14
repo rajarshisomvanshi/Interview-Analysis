@@ -5,7 +5,7 @@ from pathlib import Path
 
 BASE_URL = "http://localhost:8000"
 # Use the same video path as before
-VIDEO_PATH = r"data/sessions/e658038b-4234-4d8c-bfde-346dcfbbb17a/source_video.mp4"
+VIDEO_PATH = "frontend_video.mp4"
 
 def test_analyze_quick():
     print(f"Triggering quick analysis for: {VIDEO_PATH}")

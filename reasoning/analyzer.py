@@ -5,7 +5,8 @@ Performs LLM-based behavioral analysis on interview data.
 """
 
 import logging
-from typing import List, Optional, Dict
+import enum
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 try:
@@ -140,7 +141,15 @@ class InterviewAnalyzer:
             executive_summary="Analysis pending...",
             integrity_score=50.0,
             confidence_score=50.0,
-            risk_score=50.0
+            risk_score=50.0,
+            mental_alertness_score=50.0,
+            critical_assimilation_score=50.0,
+            clear_exposition_score=50.0,
+            balance_judgment_score=50.0,
+            interest_depth_score=50.0,
+            social_cohesion_score=50.0,
+            intellectual_integrity_score=50.0,
+            state_awareness_score=50.0
         )
 
         # 1. Analyze each question
@@ -209,6 +218,16 @@ class InterviewAnalyzer:
             Integrity Score: [0-100]
             Confidence Score: [0-100]
             Risk Score: [0-100]
+            
+            UPSC 8 Parameters (Numeric 0-100):
+            Mental Alertness: [0-100]
+            Critical Assimilation: [0-100]
+            Clear Exposition: [0-100]
+            Balance Judgment: [0-100]
+            Interest Depth: [0-100]
+            Social Cohesion: [0-100]
+            Intellectual Integrity: [0-100]
+            State Awareness: [0-100]
             """
             
             response = self._call_llm(prompt)
@@ -221,6 +240,16 @@ class InterviewAnalyzer:
             session_analysis.integrity_score = self._extract_score(response, "Integrity Score")
             session_analysis.confidence_score = self._extract_score(response, "Confidence Score")
             session_analysis.risk_score = self._extract_score(response, "Risk Score")
+            
+            # Extract UPSC scores
+            session_analysis.mental_alertness_score = self._extract_score(response, "Mental Alertness")
+            session_analysis.critical_assimilation_score = self._extract_score(response, "Critical Assimilation")
+            session_analysis.clear_exposition_score = self._extract_score(response, "Clear Exposition")
+            session_analysis.balance_judgment_score = self._extract_score(response, "Balance Judgment")
+            session_analysis.interest_depth_score = self._extract_score(response, "Interest Depth")
+            session_analysis.social_cohesion_score = self._extract_score(response, "Social Cohesion")
+            session_analysis.intellectual_integrity_score = self._extract_score(response, "Intellectual Integrity")
+            session_analysis.state_awareness_score = self._extract_score(response, "State Awareness")
             
         except Exception as e:
             logger.error(f"Failed to generate session summary: {e}")
@@ -294,6 +323,7 @@ class InterviewAnalyzer:
         transcript_segments: List[Dict],
         session_duration_ms: int,
         slice_duration_ms: int = 60000,
+        timeline: Optional[Any] = None, # UnifiedTimeline
         progress_callback: Optional[callable] = None
     ) -> List[Dict]:
         """
@@ -318,27 +348,62 @@ class InterviewAnalyzer:
             end_ms = min((i + 1) * slice_duration_ms, session_duration_ms)
             
             # Filter segments in this slice
-            slice_text = []
+            slice_segments = []
             for seg in transcript_segments:
                 # Check overlap
                 seg_start = seg.get('timestamp_ms', 0) if isinstance(seg, dict) else seg.timestamp_ms
-                seg_end = seg.get('end_ms', seg_start + 5000) if isinstance(seg, dict) else seg.end_ms
-                
                 if seg_start >= start_ms and seg_start < end_ms:
-                    text = seg.get('text', '') if isinstance(seg, dict) else seg.text
-                    speaker = seg.get('speaker', 'unknown') if isinstance(seg, dict) else seg.speaker
-                    slice_text.append(f"{speaker}: {text}")
+                    slice_segments.append(seg)
             
-            if not slice_text:
+            if not slice_segments:
                 if progress_callback:
                     progress_callback(i + 1, num_slices, slices)
                 continue
                 
-            context = "\n".join(slice_text)
+            # Group words by speaker for better context and token efficiency
+            grouped_text = []
+            current_speaker = None
+            current_block = []
             
+            for seg in slice_segments:
+                speaker = (seg.get('speaker', 'unknown') if isinstance(seg, dict) else seg.speaker)
+                if isinstance(speaker, enum.Enum):
+                    speaker = speaker.value
+                
+                text = seg.get('text', '') if isinstance(seg, dict) else seg.text
+                
+                if speaker != current_speaker:
+                    if current_block:
+                        grouped_text.append(f"{current_speaker}: {' '.join(current_block)}")
+                    current_speaker = speaker
+                    current_block = [text]
+                else:
+                    current_block.append(text)
+            
+            if current_block:
+                grouped_text.append(f"{current_speaker}: {' '.join(current_block)}")
+            
+            context = "\n".join(grouped_text)
+            
+            # Add vision context if timeline is available
+            vision_context = ""
+            if timeline:
+                try:
+                    face_signals = timeline.get_face_signals(start_ms, end_ms)
+                    body_signals = timeline.get_body_signals(start_ms, end_ms)
+                    
+                    if face_signals:
+                        eye_contact = sum(1 for s in face_signals if getattr(s, 'eye_contact', 0) > 0.5) / len(face_signals)
+                        vision_context += f"\nVision Signal: Eye Contact Stability {eye_contact:.1%}"
+                    
+                    if body_signals:
+                        shifts = sum(1 for s in body_signals if getattr(s, 'posture_shift_detected', False))
+                        vision_context += f"\nVision Signal: {shifts} significant posture shifts detected."
+                except Exception as e:
+                    logger.warning(f"Failed to extract vision context for slice: {e}")
+
             # Analyze slice
-            # Analyze slice
-            prompt = self._build_prompt(context)
+            prompt = self._build_prompt(context, vision_context=vision_context)
             
             try:
                 response = self._call_llm(prompt)
@@ -353,6 +418,16 @@ class InterviewAnalyzer:
                 
                 # Extract aggregate score if provided, otherwise average
                 agg_score = self._extract_score(response, "Aggregate Score")
+                
+                # Extract 8 UPSC criteria
+                mental = self._extract_score(response, "Mental Alertness")
+                critical = self._extract_score(response, "Critical Assimilation")
+                exposition = self._extract_score(response, "Clear Exposition")
+                judgment = self._extract_score(response, "Balance Judgment")
+                interest = self._extract_score(response, "Interest Depth")
+                cohesion = self._extract_score(response, "Social Cohesion")
+                integrity = self._extract_score(response, "Intellectual Integrity")
+                awareness = self._extract_score(response, "State Awareness")
                 
                 # Smart Fallback: If scores are 0/50 (default), use heuristic
                 if agg_score == 50.0 and fluency == 50.0 and conf == 50.0:
@@ -388,9 +463,20 @@ class InterviewAnalyzer:
                     "insight": insight,
                     "score": agg_score,
                     "summary": summary,
+                    "dialogue": context, # Store raw transcript for the "OnA" dropdown
+                    "behavioral_analysis": summary, # Map summary to behavioral analysis explicitly
                     "fluency": fluency,
                     "confidence": conf,
-                    "attitude": att
+                    "attitude": att,
+                    "mental_alertness": mental,
+                    "critical_assimilation": critical,
+                    "clear_exposition": exposition,
+                    "balance_judgment": judgment,
+                    "interest_depth": interest,
+                    "social_cohesion": cohesion,
+                    "intellectual_integrity": integrity,
+                    "state_awareness": awareness,
+                    "interviewer_improvements": self._extract_section(response, "Interviewer Improvements")
                 })
                 logger.info(f"Analyzed slice {i+1}/{num_slices} - Score: {agg_score}")
                 
@@ -476,7 +562,8 @@ class InterviewAnalyzer:
         1. Identify clear questions asked and their corresponding answers.
         2. Identify the START timestamp from the first segment of the question and the END timestamp from the last segment of the answer.
         3. Maintain the core meaning. Summarize if necessary.
-        4. Return the result as a strict JSON list of objects.
+        4. **DO NOT include speaker labels (like "interviewer:" or "unknown:") inside the "question" or "answer" text fields.** Extract only the speech content.
+        5. Return the result as a strict JSON list of objects.
         
         Required JSON format:
         [
@@ -534,29 +621,35 @@ class InterviewAnalyzer:
             logger.error(f"Failed LLM Q&A extraction: {e}")
             return []
 
-    def _build_prompt(self, context: str) -> str:
+    def _build_prompt(self, context: str, vision_context: str = "") -> str:
         """Builds prompt for slice analysis."""
         return f"""
         Analyze the following interview segment:
-        
+
         {context}
-        
-        Provide a deep behavioral forensic analysis:
-        1. Key Insight: What is the most significant observation here?
-        2. Behavioral Scores (0-100):
-           - Fluency: Speech pacing, lack of fillers, clarity of thought.
-           - Confidence: Posture (implied), certainty in voice, delivery strength.
-           - Attitude: Energy, professional demeanor, engagement level.
-        3. Aggregate Score: A weighted balance of overall performance (0-100).
-        4. Summary: A brief 1-sentence summary of events.
-        
+        {vision_context}
+
         Format:
-        Insight: [Insight text]
+        Insight: [Deep behavioral insight text]
         Fluency: [0-100]
         Confidence: [0-100]
         Attitude: [0-100]
+        
+        UPSC Scores:
+        Mental Alertness: [0-100]
+        Critical Assimilation: [0-100]
+        Clear Exposition: [0-100]
+        Balance Judgment: [0-100]
+        Interest Depth: [0-100]
+        Social Cohesion: [0-100]
+        Intellectual Integrity: [0-100]
+        State Awareness: [0-100]
+        
         Aggregate Score: [0-100]
-        Summary: [Summary text]
+        Summary: [Brief 1-sentence behavioral analysis focusing ONLY on candidate's non-verbal and verbal performance, NOT a transcript]
+        Interviewer Improvements: [Provide 1-2 specific bullet points on how the interviewer could have better engaged the candidate or handled this segment to get more depth]
+        
+        CRITICAL: Do NOT include preamble like "Slice X" or "Here is the analysis". Start directly with "Insight:".
         """
         
     def chat_with_context(self, session_analysis: SessionAnalysis, user_message: str, history: List[Dict[str, str]]) -> str:
@@ -726,30 +819,53 @@ Always explain WHY you selected these slices after the tag.
             
     def _extract_section(self, text: str, section_name: str) -> str:
         """
-        Extract a section from LLM response.
-        
-        Args:
-            text: Full response text
-            section_name: Section name to extract
-            
-        Returns:
-            Extracted section text
+        Extract a section from LLM response while preserving formatting.
         """
-        # Simple extraction - in production, use more robust parsing
         lines = text.split('\n')
         section_text = []
         in_section = False
         
+        # Section headers to stop at
+        headers = ["insight", "summary", "fluency", "confidence", "attitude", "upsc scores", "aggregate score", "executive summary", "overall trends", "communication patterns", "behavioral patterns", "integrity score", "confidence score", "risk score"]
+        
         for line in lines:
-            if section_name.lower() in line.lower():
-                in_section = True
+            line_clean = line.strip().lower()
+            if not line_clean:
+                if in_section:
+                    section_text.append("") # Preserve paragraph spacing
                 continue
-            elif in_section and line.strip().startswith('**'):
-                break
-            elif in_section and line.strip():
+                
+            # Check if this line is our header
+            if not in_section:
+                if section_name.lower() in line_clean and (line_clean.endswith(':') or ":" in line_clean):
+                    # We found our section. Start collecting from the next part of this line if any
+                    in_section = True
+                    # If the content is on the same line after the colon
+                    parts = line.split(':', 1)
+                    if len(parts) > 1 and parts[1].strip():
+                        section_text.append(parts[1].strip())
+                    continue
+            else:
+                # We are in the section. Check if we should stop.
+                is_other_header = False
+                for h in headers:
+                    if h != section_name.lower() and h in line_clean and (line_clean.endswith(':') or line_clean.startswith('**')):
+                        is_other_header = True
+                        break
+                
+                if is_other_header:
+                    break
+                
+                # Otherwise, keep collecting
                 section_text.append(line.strip())
                 
-        return ' '.join(section_text) if section_text else "Not available"
+        # Clean up results
+        result = '\n'.join(section_text).strip()
+        # Remove any leading markers the LLM might have hallucinated
+        if result.lower().startswith(f"{section_name.lower()}:"):
+            result = result[len(section_name)+1:].strip()
+            
+        return result if result else "Not available"
 
     def _calculate_session_scores(self, session_analysis: SessionAnalysis):
         """
@@ -796,5 +912,15 @@ Always explain WHY you selected these slices after the tag.
             # If Attitude is 80 (High), Risk is 20 (Low).
             # If Attitude is 30 (Low), Risk is 70 (High).
             session_analysis.risk_score = round(max(0.0, 100.0 - avg_attitude), 1)
+            
+            # Recalculate UPSC aggregate scores
+            session_analysis.mental_alertness_score = round(sum(s.mental_alertness or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.critical_assimilation_score = round(sum(s.critical_assimilation or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.clear_exposition_score = round(sum(s.clear_exposition or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.balance_judgment_score = round(sum(s.balance_judgment or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.interest_depth_score = round(sum(s.interest_depth or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.social_cohesion_score = round(sum(s.social_cohesion or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.intellectual_integrity_score = round(sum(s.intellectual_integrity or 50.0 for s in session_analysis.slices) / count, 1)
+            session_analysis.state_awareness_score = round(sum(s.state_awareness or 50.0 for s in session_analysis.slices) / count, 1)
             
             logger.info(f"Recalculated Session Scores from {count} slices: Conf={session_analysis.confidence_score}, Int={session_analysis.integrity_score}, Risk={session_analysis.risk_score}")

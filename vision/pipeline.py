@@ -107,6 +107,7 @@ class VisionPipeline:
         self.face_clusterer = FaceClusterer()
         
         self.transcriber = None
+        self.local_llm = None
         logger.info("Initializing Transcriber...")
         try:
             self.transcriber = Transcriber()
@@ -179,6 +180,10 @@ class VisionPipeline:
                      self._frame_counter = getattr(self, '_frame_counter', 0) + 1
                      continue
                 self._frame_counter = getattr(self, '_frame_counter', 0) + 1
+                
+                # DEBUG LOG
+                if self._frame_counter % 30 == 0:
+                    logger.info(f"DEBUG: Processing frame {self._frame_counter} at {timestamp_ms}ms")
 
                 # Detect all faces
                 detection = self.phone_detector.detect_faces(frame)
@@ -319,25 +324,36 @@ class VisionPipeline:
             import os
             from utils.video_utils import VideoUtils
             
+            import concurrent.futures
+            
             try:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                     temp_audio_path = Path(tmp.name)
                 
                 # Extract audio segment
                 if VideoUtils.extract_audio_segment(video_path, temp_audio_path, last_ts, current_ts):
-                    # Transcribe
+                    # Transcribe with timeout
                     # Returns {'words': [...], 'language': 'en'}
-                    transcription_result = self.transcriber.transcribe(temp_audio_path)
-                    transcript_words = transcription_result['words']
-                    detected_language = transcription_result.get('language', 'en')
-                    
-                    transcript_text = " ".join([w['word'] for w in transcript_words])
+                    logger.info(f"Starting interim transcription for {last_ts}-{current_ts}ms...")
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(self.transcriber.transcribe, temp_audio_path)
+                        try:
+                            # 45 second timeout for transcription of a 2-minute segment
+                            transcription_result = future.result(timeout=45.0)
+                            transcript_words = transcription_result['words']
+                            detected_language = transcription_result.get('language', 'en')
+                            transcript_text = " ".join([w['word'] for w in transcript_words])
+                            logger.info(f"Interim transcription successful ({len(transcript_text)} chars).")
+                        except concurrent.futures.TimeoutError:
+                            logger.error("Interim transcription TIMEOUT after 45s.")
+                        except Exception as te:
+                            logger.error(f"Interim transcription inner error: {te}")
                     
                 # Cleanup
                 if temp_audio_path.exists():
                     os.unlink(temp_audio_path)
             except Exception as e:
-                logger.error(f"Interim transcription failed: {e}")
+                logger.error(f"Interim transcription wrapper failed: {e}")
 
         # Analyze Scene if frame available
         if kwargs.get('latest_frame') is not None and self.scene_analyzer:
@@ -355,10 +371,20 @@ class VisionPipeline:
                 'language': detected_language     # Pass detected language
             }
             logger.info(f"Generating description with Local LLM (Language: {detected_language})...")
-            description = self.local_llm.generate_description(signals_dict)
-            # with open("pipeline_debug.log", "a") as f: f.write(f"DEBUG: VisionPipeline - Generated description length: {len(description)}\n")
-            # if not description:
-            #      with open("pipeline_debug.log", "a") as f: f.write("DEBUG: VisionPipeline - Description is EMPTY\n")
+            
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self.local_llm.generate_description, signals_dict)
+                try:
+                    # 60 second timeout for LLM generation
+                    description = future.result(timeout=60.0)
+                    logger.info("Local LLM description generated successfully.")
+                except concurrent.futures.TimeoutError:
+                    logger.error("Local LLM description generation TIMEOUT after 60s.")
+                    description = "Analysis timeout. Processing continues..."
+                except Exception as le:
+                    logger.error(f"Local LLM generation failed: {le}")
+                    description = f"Analysis error: {le}"
         
         print(f"\n{'='*50}")
         print(f" INTERIM ANALYSIS: {last_ts/60000:.1f}m - {current_ts/60000:.1f}m")

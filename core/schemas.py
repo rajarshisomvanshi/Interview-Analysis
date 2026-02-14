@@ -110,6 +110,7 @@ class PersonIdentity(BaseModel):
     name: Optional[str] = None
     num_appearances: int = 0
     thumbnail_path: Optional[str] = None # Path to saved face image
+    thumbnail_url: Optional[str] = None # URL for frontend access
 
 class SessionMetadata(BaseModel):
     """Metadata for an interview session"""
@@ -153,10 +154,21 @@ class TimeSliceAnalysis(BaseModel):
     confidence: Optional[float] = None
     attitude: Optional[float] = None
     
+    # UPSC Specific Parameters (8 criteria)
+    mental_alertness: Optional[float] = None
+    critical_assimilation: Optional[float] = None
+    clear_exposition: Optional[float] = None
+    balance_judgment: Optional[float] = None
+    interest_depth: Optional[float] = None
+    social_cohesion: Optional[float] = None
+    intellectual_integrity: Optional[float] = None
+    state_awareness: Optional[float] = None
+    
     # Detailed LLM Output
     scene_description: Optional[str] = None
     dialogue: Optional[str] = None
     behavioral_analysis: Optional[str] = None
+    interviewer_improvements: Optional[str] = None # New: Tips for the interviewer
 
 class SessionAnalysis(BaseModel):
     """Full session analysis"""
@@ -172,6 +184,16 @@ class SessionAnalysis(BaseModel):
     integrity_score: float = Field(0.0, ge=0, le=100, description="0-100 score indicating likelihood of honesty")
     confidence_score: float = Field(0.0, ge=0, le=100, description="0-100 score indicating displayed confidence")
     risk_score: float = Field(0.0, ge=0, le=100, description="0-100 score indicating potential risk/deception")
+    
+    # Aggregate UPSC Scores
+    mental_alertness_score: float = 0.0
+    critical_assimilation_score: float = 0.0
+    clear_exposition_score: float = 0.0
+    balance_judgment_score: float = 0.0
+    interest_depth_score: float = 0.0
+    social_cohesion_score: float = 0.0
+    intellectual_integrity_score: float = 0.0
+    state_awareness_score: float = 0.0
     
     # Time Slices
     slices: List[TimeSliceAnalysis] = Field(default_factory=list, description="Time-segmented analysis (e.g. 2-min chunks)")

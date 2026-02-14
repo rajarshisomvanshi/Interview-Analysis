@@ -24,6 +24,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
   const [translatedSlices, setTranslatedSlices] = useState<Record<number, { insight: string, summary: string }>>({});
   const [isTranslating, setIsTranslating] = useState(false);
+  const [expandedSlices, setExpandedSlices] = useState<Record<number, boolean>>({});
+  const [expandedImprovements, setExpandedImprovements] = useState<Record<number, boolean>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -152,6 +154,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     }
   };
 
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Don't trigger session selection
+    if (!window.confirm('Are you sure you want to delete this session? This action cannot be undone.')) return;
+
+    try {
+      await api.deleteSession(id);
+      setCandidates(prev => prev.filter(c => c.id !== id));
+      if (activeCandidate?.id === id) {
+        setActiveCandidate(null);
+        setVideoSource(null);
+      }
+    } catch (e) {
+      console.error("Delete failed", e);
+      alert("Failed to delete session.");
+    }
+  };
+
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -245,9 +264,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         setActiveCandidate(newSession);
       }
 
-      setIsUploading(false);
     } catch (e) {
       console.error("Upload failed", e);
+      alert(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
       setIsUploading(false);
     }
   };
@@ -381,7 +401,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
           <div className="space-y-4 pt-4 border-t border-white/5">
             <div className="flex justify-between items-center text-[8px] font-black text-slate-500 uppercase tracking-widest orbitron">
-              <span>{formatTime(currentSlice.start_ms)} Segment Insight</span>
+              <span>{formatTime(currentSlice.start_ms)} Behavioral Insight</span>
               <button
                 onClick={() => handleTranslateSlice(currentSliceIndex, currentSlice.insight, currentSlice.summary)}
                 className="hover:text-white transition-colors flex items-center gap-1"
@@ -396,14 +416,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             )}
 
             <div className="h-px w-8 bg-white/20"></div>
-            <p className="text-xs text-slate-400 leading-relaxed italic">
-              {currentSlice.summary}
-            </p>
-            {translatedSlices[currentSliceIndex] && (
-              <p className="text-xs text-slate-400 leading-relaxed italic font-hindi mt-2">
-                {translatedSlices[currentSliceIndex].summary}
+
+            {/* Behavioral Analysis Section */}
+            <div>
+              <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest orbitron mb-2">Behavioral Analysis</p>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {currentSlice.behavioral_analysis || currentSlice.summary}
               </p>
-            )}
+            </div>
+
+            {/* Collapsible Q&A (Transcription) Section */}
+            <div className="pt-2">
+              <button
+                onClick={() => setExpandedSlices(prev => ({ ...prev, [currentSliceIndex]: !prev[currentSliceIndex] }))}
+                className="flex items-center gap-2 text-[8px] font-black text-emerald-500 uppercase tracking-widest orbitron hover:text-emerald-400 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[10px]">
+                  {expandedSlices[currentSliceIndex] ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+                </span>
+                OnA (Transcript)
+              </button>
+
+              {expandedSlices[currentSliceIndex] && (
+                <div className="mt-4 p-4 bg-white/5 rounded-lg border border-white/5 animate-fade-in">
+                  <p className="text-[10px] text-slate-400 leading-relaxed font-mono whitespace-pre-wrap">
+                    {currentSlice.dialogue || "No transcript available for this segment."}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <button
@@ -438,30 +479,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             ))}
           </div>
         </div>
-        <div className="flex items-end gap-[2px] p-4 overflow-x-auto custom-scrollbar-h h-32">
+        <div className="flex gap-[1px] p-2 bg-black/40 h-8">
           {slices.map((slice: any, idx: number) => {
             const isActive = idx === currentSliceIndex;
-
-            // Calculate proportional segments (assuming base aggregate is mean)
-            const fHeight = (slice.fluency || 0) / 3;
-            const cHeight = (slice.confidence || 0) / 3;
-            const aHeight = (slice.attitude || 0) / 3;
-
-            // Determine if this slice should be highlighted (or dimmed if others are highlighted)
-            let opacityClass = 'opacity-60 group-hover:opacity-100';
-            let ringClass = '';
-
-            if (isActive) {
-              opacityClass = ''; // Active always fully visible
-              ringClass = 'ring-1 ring-white shadow-[0_0_20px_rgba(255,255,255,0.2)]';
-            } else if (highlightedSlices) {
-              if (highlightedSlices.indices.includes(idx)) {
-                opacityClass = 'opacity-100';
-                ringClass = `ring-2 ring-${highlightedSlices.color}-500 shadow-[0_0_15px_var(--${highlightedSlices.color}-500)]`;
-              } else {
-                opacityClass = 'opacity-20 blur-[1px]'; // Dim non-highlighted slices significantly
-              }
-            }
+            const scoreColor = slice.score > 70 ? 'bg-emerald-500' : 'bg-red-500';
 
             return (
               <div
@@ -470,30 +491,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                   setCurrentSliceIndex(idx);
                   seekToSlice(slice);
                 }}
-                className={`group relative flex flex-col justify-end flex-1 min-w-[20px] max-w-[40px] h-full cursor-pointer transition-all hover:scale-y-110 ${isActive ? 'scale-x-110 z-10' : ''}`}
+                className={`flex-1 h-full cursor-pointer transition-all relative group overflow-hidden first:rounded-l-lg last:rounded-r-lg ${isActive ? 'scale-y-125 z-10' : 'hover:scale-y-110'}`}
               >
-                {/* Score Tooltip */}
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white text-black text-[8px] font-black p-2 rounded shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none min-w-[80px]">
-                  <p className="border-b border-black/10 pb-1 mb-1 uppercase tracking-tighter">Segment {idx + 1}</p>
-                  <p className="flex justify-between">FL: <span>{slice.fluency}%</span></p>
-                  <p className="flex justify-between">CO: <span>{slice.confidence}%</span></p>
-                  <p className="flex justify-between">AT: <span>{slice.attitude}%</span></p>
-                  <p className="mt-1 pt-1 border-t border-black/10 flex justify-between font-bold text-[10px]">TOTAL: <span>{slice.score}%</span></p>
-                </div>
+                <div className={`w-full h-full ${scoreColor} ${isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-70'} transition-opacity`}></div>
 
-                {/* The Stacked Bar */}
-                <div className={`w-full flex flex-col justify-end rounded-t-sm overflow-hidden transition-all duration-500 ${ringClass} ${opacityClass}`} style={{ height: `${Math.max(10, slice.score)}%` }}>
-                  {highlightedSlices && highlightedSlices.indices.includes(idx) ? (
-                    // Monochromatic highlight
-                    <div className={`w-full h-full bg-${highlightedSlices.color}-500`}></div>
-                  ) : (
-                    <>
-                      <>
-                        <div className={`${slice.score > 70 ? 'bg-emerald-500' : 'bg-red-500'} w-full h-full`}></div>
-                      </>
-                    </>
-                  )}
-                </div>
+                {isActive && (
+                  <div className="absolute top-0 left-0 w-full h-full border-x border-white bg-white/10"></div>
+                )}
               </div>
             );
           })}
@@ -581,7 +585,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <div
               key={c.id}
               onClick={() => setActiveCandidate(c)}
-              className={`flex items-center gap-3 p-3 cursor-pointer transition-all border-l-2 ${activeCandidate?.id === c.id ? 'bg-white/10 border-white' : 'hover:bg-white/5 border-transparent'}`}
+              className={`group flex items-center gap-3 p-3 cursor-pointer transition-all border-l-2 ${activeCandidate?.id === c.id ? 'bg-white/10 border-white' : 'hover:bg-white/5 border-transparent'}`}
             >
               <div
                 className={`w-8 h-8 rounded-sm bg-center bg-cover border ${activeCandidate?.id === c.id ? 'border-white/30' : 'border-white/10'}`}
@@ -593,6 +597,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                   {c.status === 'processing' ? 'Analyzing...' : c.timeAgo}
                 </p>
               </div>
+
+              <button
+                onClick={(e) => handleDeleteSession(e, c.id)}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
+                title="Delete Session"
+              >
+                <span className="material-symbols-outlined text-sm">delete</span>
+              </button>
             </div>
           ))}
         </div>
@@ -759,6 +771,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                         <div className="h-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" style={{ width: `${current.confidenceScore || 0}%` }}></div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* UPSC Specific 8-Parameter Grid */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+                    {[
+                      { label: 'Mental Alertness', key: 'mentalAlertnessScore', icon: 'psychology' },
+                      { label: 'Critical Assimilation', key: 'criticalAssimilationScore', icon: 'account_tree' },
+                      { label: 'Clear Exposition', key: 'clearExpositionScore', icon: 'record_voice_over' },
+                      { label: 'Judgment Balance', key: 'balanceJudgmentScore', icon: 'balance' },
+                      { label: 'Interest Depth', key: 'interestDepthScore', icon: 'search_insights' },
+                      { label: 'Social Cohesion', key: 'socialCohesionScore', icon: 'groups' },
+                      { label: 'Intellectual Integrity', key: 'intellectualIntegrityScore', icon: 'auto_awesome' },
+                      { label: 'State Awareness', key: 'stateAwarenessScore', icon: 'public' }
+                    ].map(param => (
+                      <div key={param.key} className="glass-card p-4 border border-white/5 bg-zinc-900/20 rounded-xl">
+                        <div className="flex justify-between items-center mb-1">
+                          <p className="text-[7px] font-bold text-slate-500 uppercase tracking-widest orbitron">{param.label}</p>
+                          <span className="material-symbols-outlined text-slate-500 text-[10px]">{param.icon}</span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <h4 className="text-xl font-black text-white leading-none">{(current as any)[param.key] || '--'}%</h4>
+                          <div className="flex-1 h-0.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-full bg-slate-400" style={{ width: `${(current as any)[param.key] || 0}%` }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="glass-card p-10 border border-white/10 bg-zinc-900/40 rounded-2xl shadow-xl relative overflow-hidden group">

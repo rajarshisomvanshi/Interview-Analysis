@@ -2,7 +2,7 @@
 import requests
 import sys
 
-URL = "http://localhost:8000/analyze-quick"
+URL = "http://127.0.0.1:8000/analyze-quick"
 VIDEO_PATH = "frontend_video.mp4"
 
 def test_upload():

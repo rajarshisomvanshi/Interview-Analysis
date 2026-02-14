@@ -43,6 +43,15 @@ class TimeSliceResponse(BaseModel):
     scene_description: Optional[str] = None
     dialogue: Optional[str] = None
     behavioral_analysis: Optional[str] = None
+    interviewer_improvements: Optional[str] = None
+    mental_alertness: Optional[float] = None
+    critical_assimilation: Optional[float] = None
+    clear_exposition: Optional[float] = None
+    balance_judgment: Optional[float] = None
+    interest_depth: Optional[float] = None
+    social_cohesion: Optional[float] = None
+    intellectual_integrity: Optional[float] = None
+    state_awareness: Optional[float] = None
 
 
 class AnalysisResultsResponse(BaseModel):
@@ -58,6 +67,14 @@ class AnalysisResultsResponse(BaseModel):
     download_url: Optional[str] = Field(None, description="URL to download full results JSON")
     slices: Optional[List[TimeSliceResponse]] = Field(None, description="List of time slices")
     qa_pairs: Optional[List[QuestionAnswerPair]] = Field(None, description="List of Q&A pairs associated with the session")
+    mental_alertness_score: float = 0.0
+    critical_assimilation_score: float = 0.0
+    clear_exposition_score: float = 0.0
+    balance_judgment_score: float = 0.0
+    interest_depth_score: float = 0.0
+    social_cohesion_score: float = 0.0
+    intellectual_integrity_score: float = 0.0
+    state_awareness_score: float = 0.0
 
 
 class TimelineDataResponse(BaseModel):
@@ -99,6 +116,14 @@ class SessionSummary(BaseModel):
     integrity_score: Optional[float] = None
     confidence_score: Optional[float] = None
     risk_score: Optional[float] = None
+    mental_alertness_score: Optional[float] = None
+    critical_assimilation_score: Optional[float] = None
+    clear_exposition_score: Optional[float] = None
+    balance_judgment_score: Optional[float] = None
+    interest_depth_score: Optional[float] = None
+    social_cohesion_score: Optional[float] = None
+    intellectual_integrity_score: Optional[float] = None
+    state_awareness_score: Optional[float] = None
 
 
 class SessionListResponse(BaseModel):

@@ -95,5 +95,18 @@ export const api = {
 
         const data = await response.json();
         return data.translated_text;
+    },
+
+    // Delete a session
+    async deleteSession(sessionId: string): Promise<boolean> {
+        const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete session');
+        }
+
+        return true;
     }
 };

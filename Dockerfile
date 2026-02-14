@@ -13,11 +13,11 @@ WORKDIR /app
 
 # Install system dependencies
 # ffmpeg: for audio processing
-# libgl1-mesa-glx: for OpenCV
+# libgl1: for OpenCV (replaces libgl1-mesa-glx in newer Debian)
 # build-essential: for compiling some python extensions
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     build-essential \
     && rm -rf /var/lib/apt/lists/*

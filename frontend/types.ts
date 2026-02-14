@@ -15,6 +15,14 @@ export interface Candidate {
   integrityScore?: number;
   confidenceScore?: number;
   riskScore?: number;
+  mentalAlertnessScore?: number;
+  criticalAssimilationScore?: number;
+  clearExpositionScore?: number;
+  balanceJudgmentScore?: number;
+  interestDepthScore?: number;
+  socialCohesionScore?: number;
+  intellectualIntegrityScore?: number;
+  stateAwarenessScore?: number;
   executiveSummary?: string;
   chatHistory?: Message[];
   slices?: TimeSlice[];
@@ -53,6 +61,14 @@ export interface TimeSlice {
   scene_description?: string;
   dialogue?: string;
   behavioral_analysis?: string;
+  mental_alertness?: number;
+  critical_assimilation?: number;
+  clear_exposition?: number;
+  balance_judgment?: number;
+  interest_depth?: number;
+  social_cohesion?: number;
+  intellectual_integrity?: number;
+  state_awareness?: number;
 }
 
 export interface AnalysisStatus {

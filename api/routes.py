@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks,
 from datetime import datetime
 import logging
 import traceback
+import cv2
 
 from api.models import (
     SessionCreateRequest,
@@ -344,29 +345,50 @@ def run_analysis(session_id: str):
         else:
             # Single video flow (face only for now, unless we want to run both on same video)
             if phone_video_path and phone_video_path.exists():
-                log_debug(f"Skipping Face Recognition (Clustering) for {session_id} as per pipeline optimization.")
+                logger.info(f"Starting Face Clustering (MediaPipe Fallback) for {session_id}")
                 if session_id in session_status:
-                    session_status[session_id]["current_step"] = "Using default identities (Skip Clustering)"
+                    session_status[session_id]["current_step"] = "Identifying individuals (Face Clustering)"
                 
-                # Use default identity for candidate
-                converted_identities = {
-                    "person_0": PersonIdentity(
-                        id="person_0",
-                        role="Candidate",
-                        num_appearances=1,
-                        thumbnail_url=None
+                # Undo bypass: Call the actual clusterer
+                identities = vision_pipeline.face_clusterer.process_video_for_clustering(str(phone_video_path))
+                roles = vision_pipeline.face_clusterer.auto_assign_roles(identities)
+                
+                # Save identities to session data
+                converted_identities = {}
+                for pid, id_data in roles.items():
+                    # Save thumbnail if available
+                    thumb_url = None
+                    if id_data.representative_image is not None:
+                        import os
+                        thumb_dir = settings.get_session_dir(session_id) / "thumbnails"
+                        thumb_dir.mkdir(parents=True, exist_ok=True)
+                        thumb_path = thumb_dir / f"{pid}.jpg"
+                        cv2.imwrite(str(thumb_path), id_data.representative_image)
+                        thumb_url = f"/sessions/{session_id}/thumbnails/{pid}.jpg"
+                    
+                    converted_identities[pid] = PersonIdentity(
+                        id=pid,
+                        role=id_data.role,
+                        num_appearances=id_data.num_appearances,
+                        thumbnail_url=thumb_url
                     )
-                }
+                
                 session_data.metadata.identities = converted_identities
-                session_data.metadata.interviewee_identity_id = "person_0"
+                # Interviewee is the one with 'interviewee' role
+                for pid, id_data in converted_identities.items():
+                    if id_data.role == "interviewee":
+                        session_data.metadata.interviewee_identity_id = pid
+                        break
+                
                 storage.save_session_data(session_data)
                 
-                # Update in-memory status with identities for early UI update
+                # Update in-memory status
                 if session_id in session_status:
                     session_status[session_id]["identities"] = {
-                        "person_0": {"id": "person_0", "role": "Candidate", "thumbnail_url": None} 
+                        pid: {"id": pid, "role": id_data.role, "thumbnail_url": id_data.thumbnail_url}
+                        for pid, id_data in converted_identities.items()
                     }
-                log_debug(f"Face Recognition bypassed for {session_id}. Using default identities.")
+                logger.info(f"Identified {len(converted_identities)} people in session {session_id}")
             
             # Define callback for interim results
             def save_interim_slice(slice_analysis: TimeSliceAnalysis):
@@ -393,7 +415,7 @@ def run_analysis(session_id: str):
                     session_status[session_id]["slices"] = current_slices
                     
                     # Update progress: Step 1 is vision (10% to 40%)
-                    if total_duration_ms > 0:
+                    if total_duration_ms and total_duration_ms > 0:
                         progress = 0.1 + (0.3 * (slice_analysis.end_ms / total_duration_ms))
                         session_status[session_id]["progress"] = min(0.4, progress)
                     
@@ -482,6 +504,7 @@ def run_analysis(session_id: str):
                  transcript_segments, 
                  timeline.get_duration_ms(), 
                  60000, # 1 minute slices
+                 timeline=timeline,
                  progress_callback=update_progress
              )
         

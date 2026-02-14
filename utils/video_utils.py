@@ -82,9 +82,22 @@ class VideoUtils:
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
             return 0
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-        duration_ms = int((frame_count / fps) * 1000) if fps > 0 else 0
+        
+        duration_ms = 0
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+            if fps > 0:
+                duration_ms = int((frame_count / fps) * 1000)
+            else:
+                logger.warning(f"FPS is zero for video: {video_path}")
+        except Exception as e:
+            logger.error(f"Error getting video properties for {video_path}: {e}")
+        finally:
+            cap.release()
+        
+        return duration_ms
+
     @staticmethod
     def extract_audio_segment(video_path: Path, output_audio_path: Path, start_ms: int, end_ms: int) -> bool:
         """
