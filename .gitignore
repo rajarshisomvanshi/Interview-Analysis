@@ -3,14 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
-.env
-.env.local
+# .env
+# .env.local
 
 # Node/Frontend
 frontend/node_modules/
 frontend/dist/
-frontend/.env
-frontend/.env.local
+# frontend/.env
+# frontend/.env.local
 
 # IDE
 .idea/

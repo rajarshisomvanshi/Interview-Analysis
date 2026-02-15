@@ -2,7 +2,7 @@ import requests
 import time
 import sys
 
-SESSION_ID = "eb9f87b9-6397-40a6-a149-fa8cb6d3b29f"
+SESSION_ID = "3b67bac8-480b-4f05-9e16-f02ec5a0cd7b"
 URL = f"http://localhost:8000/sessions/{SESSION_ID}/analyze"
 
 def trigger():

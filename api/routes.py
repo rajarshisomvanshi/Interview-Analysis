@@ -652,6 +652,14 @@ async def get_analysis_results(session_id: str):
         integrity_score=analysis.integrity_score if hasattr(analysis, "integrity_score") else None,
         confidence_score=analysis.confidence_score if hasattr(analysis, "confidence_score") else None,
         risk_score=analysis.risk_score if hasattr(analysis, "risk_score") else None,
+        mental_alertness_score=analysis.mental_alertness_score if hasattr(analysis, "mental_alertness_score") else 0.0,
+        critical_assimilation_score=analysis.critical_assimilation_score if hasattr(analysis, "critical_assimilation_score") else 0.0,
+        clear_exposition_score=analysis.clear_exposition_score if hasattr(analysis, "clear_exposition_score") else 0.0,
+        balance_judgment_score=analysis.balance_judgment_score if hasattr(analysis, "balance_judgment_score") else 0.0,
+        interest_depth_score=analysis.interest_depth_score if hasattr(analysis, "interest_depth_score") else 0.0,
+        social_cohesion_score=analysis.social_cohesion_score if hasattr(analysis, "social_cohesion_score") else 0.0,
+        intellectual_integrity_score=analysis.intellectual_integrity_score if hasattr(analysis, "intellectual_integrity_score") else 0.0,
+        state_awareness_score=analysis.state_awareness_score if hasattr(analysis, "state_awareness_score") else 0.0,
         download_url=f"/sessions/{session_id}/download/analysis",
         slices=[
             TimeSliceResponse(
@@ -858,7 +866,8 @@ async def chat_with_session(session_id: str, request: ChatRequest):
             # Check if session exists at all
             if not storage.load_session_data(session_id):
                 raise HTTPException(status_code=404, detail="Session not found")
-            raise HTTPException(status_code=400, detail="Analysis hasn't started yet. Please wait for the first results to appear.")
+            # Instead of 400, return a polite message
+            return ChatResponse(response="I'm still analyzing the interview data. Please check back in a few moments once the processing is complete.")
             
         # Initialize analyzer
         analyzer = InterviewAnalyzer()

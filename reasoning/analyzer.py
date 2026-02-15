@@ -218,20 +218,27 @@ class InterviewAnalyzer:
             Integrity Score: [0-100]
             Confidence Score: [0-100]
             Risk Score: [0-100]
-            
-            UPSC 8 Parameters (Numeric 0-100):
-            Mental Alertness: [0-100]
-            Critical Assimilation: [0-100]
-            Clear Exposition: [0-100]
-            Balance Judgment: [0-100]
-            Interest Depth: [0-100]
-            Social Cohesion: [0-100]
-            Intellectual Integrity: [0-100]
-            State Awareness: [0-100]
+
+            REQUIRED UPSC SCORES (0-100):
+            Mental Alertness Score: [0-100]
+            Critical Assimilation Score: [0-100]
+            Clear Exposition Score: [0-100]
+            Judgment Balance Score: [0-100]
+            Interest Depth Score: [0-100]
+            Social Cohesion Score: [0-100]
+            Intellectual Integrity Score: [0-100]
+            State Awareness Score: [0-100]
             """
             
             response = self._call_llm(prompt)
             
+            # Log full response for debugging
+            try:
+                with open("last_llm_response.txt", "w", encoding="utf-8") as f:
+                    f.write(response)
+            except Exception:
+                pass
+
             session_analysis.executive_summary = self._extract_section(response, "Executive Summary")
             session_analysis.overall_trends = self._extract_section(response, "Overall Trends")
             session_analysis.communication_patterns = self._extract_section(response, "Communication Patterns")
@@ -241,15 +248,19 @@ class InterviewAnalyzer:
             session_analysis.confidence_score = self._extract_score(response, "Confidence Score")
             session_analysis.risk_score = self._extract_score(response, "Risk Score")
             
-            # Extract UPSC scores
-            session_analysis.mental_alertness_score = self._extract_score(response, "Mental Alertness")
-            session_analysis.critical_assimilation_score = self._extract_score(response, "Critical Assimilation")
-            session_analysis.clear_exposition_score = self._extract_score(response, "Clear Exposition")
-            session_analysis.balance_judgment_score = self._extract_score(response, "Balance Judgment")
-            session_analysis.interest_depth_score = self._extract_score(response, "Interest Depth")
-            session_analysis.social_cohesion_score = self._extract_score(response, "Social Cohesion")
-            session_analysis.intellectual_integrity_score = self._extract_score(response, "Intellectual Integrity")
-            session_analysis.state_awareness_score = self._extract_score(response, "State Awareness")
+            # Extract UPSC scores - using "Score" suffix to be explicit
+            session_analysis.mental_alertness_score = self._extract_score(response, "Mental Alertness Score")
+            session_analysis.critical_assimilation_score = self._extract_score(response, "Critical Assimilation Score")
+            session_analysis.clear_exposition_score = self._extract_score(response, "Clear Exposition Score")
+            
+            session_analysis.balance_judgment_score = self._extract_score(response, "Judgment Balance Score")
+            if session_analysis.balance_judgment_score == 50.0:
+                 session_analysis.balance_judgment_score = self._extract_score(response, "Balance Judgment Score")
+
+            session_analysis.interest_depth_score = self._extract_score(response, "Interest Depth Score")
+            session_analysis.social_cohesion_score = self._extract_score(response, "Social Cohesion Score")
+            session_analysis.intellectual_integrity_score = self._extract_score(response, "Intellectual Integrity Score")
+            session_analysis.state_awareness_score = self._extract_score(response, "State Awareness Score")
             
         except Exception as e:
             logger.error(f"Failed to generate session summary: {e}")
@@ -624,17 +635,25 @@ class InterviewAnalyzer:
     def _build_prompt(self, context: str, vision_context: str = "") -> str:
         """Builds prompt for slice analysis."""
         return f"""
-        Analyze the following interview segment:
+        Analyze the following interview segment as an elite UPSC behavioral coach.
 
+        CONTEXT:
         {context}
         {vision_context}
 
-        Format:
+        INSTRUCTIONS:
+        Evaluate the candidate on the following 8 UPSC parameters (0-100).
+        Be strict. Do not give default 50. Use the transcript evidence.
+
+        REQUIRED OUTPUT FORMAT (Exact headers required):
+
         Insight: [Deep behavioral insight text]
+        
+        Scores:
         Fluency: [0-100]
         Confidence: [0-100]
         Attitude: [0-100]
-        
+
         UPSC Scores:
         Mental Alertness: [0-100]
         Critical Assimilation: [0-100]
@@ -644,14 +663,16 @@ class InterviewAnalyzer:
         Social Cohesion: [0-100]
         Intellectual Integrity: [0-100]
         State Awareness: [0-100]
-        
+
         Aggregate Score: [0-100]
+        
         Summary: [Brief 1-sentence behavioral analysis focusing ONLY on candidate's non-verbal and verbal performance, NOT a transcript]
-        Interviewer Improvements: [Provide 1-2 specific bullet points on how the interviewer could have better engaged the candidate or handled this segment to get more depth]
         
-        CRITICAL: Do NOT include preamble like "Slice X" or "Here is the analysis". Start directly with "Insight:".
+        Interviewer Improvements: 
+        - [Specific point 1]
+        - [Specific point 2]
         """
-        
+
     def chat_with_context(self, session_analysis: SessionAnalysis, user_message: str, history: List[Dict[str, str]]) -> str:
         """
         Chat with the LLM about a specific session.
@@ -762,13 +783,16 @@ Always explain WHY you selected these slices after the tag.
     def _extract_score(self, text: str, score_name: str) -> float:
         """
         Extract numeric score from text.
-        Looks for 'Score Name: [X]' or 'Score Name: X'
+        Looks for 'Score Name: [X]', 'Score Name: **X**', 'Score Name: X', etc.
         """
         import re
-        # Log the text being searched for debugging
-        # logger.debug(f"Extracting {score_name} from text: {text[:100]}...") 
         
-        pattern = re.escape(score_name) + r"[:\s]+(?:\[)?(\d+(?:\.\d+)?)(?:\])?"
+        # Robust pattern:
+        # 1. Match the score name (escaped)
+        # 2. Skip any separators (colon, space, tab, Bracket, Asterisk, Dash) until a digit is found
+        # This handles: ": ", ": **", ": [", " - ", etc.
+        pattern = re.escape(score_name) + r"[^\d]*(\d+(?:\.\d+)?)"
+        
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             try:
@@ -778,7 +802,7 @@ Always explain WHY you selected these slices after the tag.
             except ValueError:
                 pass
         
-        logger.warning(f"Failed to extract {score_name}, defaulting to 50.0. Text snippet: {text[:200] if text else 'Empty'}")
+        logger.warning(f"Failed to extract {score_name}, defaulting to 50.0. Text snippet around name: {text[:200] if text else 'Empty'}")
         return 50.0 # Default if parsing fails
 
     def _call_llm(self, prompt: str) -> str:

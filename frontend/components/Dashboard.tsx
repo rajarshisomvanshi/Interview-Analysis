@@ -118,9 +118,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           slices: results.slices,
           executiveSummary: results.executive_summary,
           qaPairs: results.qa_pairs,
-          integrityScore: results.integrity_score, // If available in response
+          integrityScore: results.integrity_score,
           confidenceScore: results.confidence_score,
-          riskScore: results.risk_score
+          riskScore: results.risk_score,
+          mentalAlertnessScore: results.mental_alertness_score,
+          criticalAssimilationScore: results.critical_assimilation_score,
+          clearExpositionScore: results.clear_exposition_score,
+          balanceJudgmentScore: results.balance_judgment_score,
+          interestDepthScore: results.interest_depth_score,
+          socialCohesionScore: results.social_cohesion_score,
+          intellectualIntegrityScore: results.intellectual_integrity_score,
+          stateAwarenessScore: results.state_awareness_score
         } : c));
 
         setActiveCandidate(prev => prev?.id === id ? {
@@ -128,25 +136,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           slices: results.slices,
           executiveSummary: results.executive_summary,
           qaPairs: results.qa_pairs,
-          // Update scores too if they are returned by getResults (they seem to be part of AnalysisResultsResponse but let's confirm schema or just trust the response)
-          // In api/routes.py getResults returns AnalysisResultsResponse which has executive_summary but does it have scores?
-          // Looking at api/routes.py:598... it doesn't seem to explicitly include scores in the top level response?
-          // Wait, I checked routes.py.
-          // It returns AnalysisResultsResponse.
-          // And SessionSummary has scores.
-          // But getResults...
-          // Let's check api/routes.py again.
-          // Line 598: return AnalysisResultsResponse(...)
-          // It has slices, qa_pairs, executive_summary.
-          // Does it have scores?
-          // I need to check AnalysisResultsResponse model definition in api/models.py
-          // But based on my previous view of routes.py, getResults has explicit fields.
-          // Let's assume for now.
-          // Actually, I should check api/models.py to be sure.
-          // But to be safe, I will just merge what I can.
-          // The executive_summary is definitely there.
-          // QA pairs are definitely there.
-
+          integrityScore: results.integrity_score,
+          confidenceScore: results.confidence_score,
+          riskScore: results.risk_score,
+          mentalAlertnessScore: results.mental_alertness_score,
+          criticalAssimilationScore: results.critical_assimilation_score,
+          clearExpositionScore: results.clear_exposition_score,
+          balanceJudgmentScore: results.balance_judgment_score,
+          interestDepthScore: results.interest_depth_score,
+          socialCohesionScore: results.social_cohesion_score,
+          intellectualIntegrityScore: results.intellectual_integrity_score,
+          stateAwarenessScore: results.state_awareness_score
         } : prev);
       }
     } catch (e) {

@@ -53,9 +53,10 @@ const FeatureSlider: React.FC<FeatureSliderProps> = ({ features, direction = 'do
                 ))}
             </div>
 
-            <style jsx>{`
+            <style dangerouslySetInnerHTML={{ __html: `
         .mask-fade-vertical {
           mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+          -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
         }
         @keyframes scroll-down {
           0% { transform: translateY(-33.33%); }
@@ -65,7 +66,7 @@ const FeatureSlider: React.FC<FeatureSliderProps> = ({ features, direction = 'do
           0% { transform: translateY(0); }
           100% { transform: translateY(-33.33%); }
         }
-      `}</style>
+      `}} />
         </div>
     );
 };
