@@ -248,19 +248,19 @@ class InterviewAnalyzer:
             session_analysis.confidence_score = self._extract_score(response, "Confidence Score")
             session_analysis.risk_score = self._extract_score(response, "Risk Score")
             
-            # Extract UPSC scores - using "Score" suffix to be explicit
-            session_analysis.mental_alertness_score = self._extract_score(response, "Mental Alertness Score")
-            session_analysis.critical_assimilation_score = self._extract_score(response, "Critical Assimilation Score")
-            session_analysis.clear_exposition_score = self._extract_score(response, "Clear Exposition Score")
+            # Extract UPSC scores - removed "Score" suffix from search key for robustness
+            session_analysis.mental_alertness_score = self._extract_score(response, "Mental Alertness")
+            session_analysis.critical_assimilation_score = self._extract_score(response, "Critical Assimilation")
+            session_analysis.clear_exposition_score = self._extract_score(response, "Clear Exposition")
             
-            session_analysis.balance_judgment_score = self._extract_score(response, "Judgment Balance Score")
+            session_analysis.balance_judgment_score = self._extract_score(response, "Judgment Balance")
             if session_analysis.balance_judgment_score == 50.0:
-                 session_analysis.balance_judgment_score = self._extract_score(response, "Balance Judgment Score")
+                 session_analysis.balance_judgment_score = self._extract_score(response, "Balance Judgment")
 
-            session_analysis.interest_depth_score = self._extract_score(response, "Interest Depth Score")
-            session_analysis.social_cohesion_score = self._extract_score(response, "Social Cohesion Score")
-            session_analysis.intellectual_integrity_score = self._extract_score(response, "Intellectual Integrity Score")
-            session_analysis.state_awareness_score = self._extract_score(response, "State Awareness Score")
+            session_analysis.interest_depth_score = self._extract_score(response, "Interest Depth")
+            session_analysis.social_cohesion_score = self._extract_score(response, "Social Cohesion")
+            session_analysis.intellectual_integrity_score = self._extract_score(response, "Intellectual Integrity")
+            session_analysis.state_awareness_score = self._extract_score(response, "State Awareness")
             
         except Exception as e:
             logger.error(f"Failed to generate session summary: {e}")
@@ -937,14 +937,21 @@ Always explain WHY you selected these slices after the tag.
             # If Attitude is 30 (Low), Risk is 70 (High).
             session_analysis.risk_score = round(max(0.0, 100.0 - avg_attitude), 1)
             
-            # Recalculate UPSC aggregate scores
-            session_analysis.mental_alertness_score = round(sum(s.mental_alertness or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.critical_assimilation_score = round(sum(s.critical_assimilation or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.clear_exposition_score = round(sum(s.clear_exposition or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.balance_judgment_score = round(sum(s.balance_judgment or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.interest_depth_score = round(sum(s.interest_depth or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.social_cohesion_score = round(sum(s.social_cohesion or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.intellectual_integrity_score = round(sum(s.intellectual_integrity or 50.0 for s in session_analysis.slices) / count, 1)
-            session_analysis.state_awareness_score = round(sum(s.state_awareness or 50.0 for s in session_analysis.slices) / count, 1)
+            # Recalculate UPSC aggregate scores - DISABLED
+            # Trust the LLM's holistic analysis instead of averaging slice defaults (which are often 50.0)
+            # If slices ever get real UPSC scoring, we can re-enable this with a check if score != 50.0
+            
+            # session_analysis.mental_alertness_score = round(sum(s.mental_alertness or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.critical_assimilation_score = round(sum(s.critical_assimilation or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.clear_exposition_score = round(sum(s.clear_exposition or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.balance_judgment_score = round(sum(s.balance_judgment or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.interest_depth_score = round(sum(s.interest_depth or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.social_cohesion_score = round(sum(s.social_cohesion or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.intellectual_integrity_score = round(sum(s.intellectual_integrity or 50.0 for s in session_analysis.slices) / count, 1)
+            # session_analysis.state_awareness_score = round(sum(s.state_awareness or 50.0 for s in session_analysis.slices) / count, 1)
+            
+            if hasattr(session_analysis, 'mental_alertness_score'): # Log for checking
+                 logger.info(f"UPSC Scores preserved from LLM: Mental={session_analysis.mental_alertness_score}")
+
             
             logger.info(f"Recalculated Session Scores from {count} slices: Conf={session_analysis.confidence_score}, Int={session_analysis.integrity_score}, Risk={session_analysis.risk_score}")
