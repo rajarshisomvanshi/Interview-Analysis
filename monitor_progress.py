@@ -56,7 +56,7 @@ if __name__ == "__main__":
         session_id = sys.argv[1]
     else:
         # Focusing on the new correct session
-        session_id = "3b67bac8-480b-4f05-9e16-f02ec5a0cd7b"
+        session_id = "51b5bd33-5a96-4ca2-8f88-2af8811013ae"
     
     if session_id:
         monitor_session(session_id)

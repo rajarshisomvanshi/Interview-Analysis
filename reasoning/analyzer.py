@@ -139,17 +139,17 @@ class InterviewAnalyzer:
             communication_patterns="Analysis pending...",
             behavioral_patterns="Analysis pending...",
             executive_summary="Analysis pending...",
-            integrity_score=50.0,
-            confidence_score=50.0,
-            risk_score=50.0,
-            mental_alertness_score=50.0,
-            critical_assimilation_score=50.0,
-            clear_exposition_score=50.0,
-            balance_judgment_score=50.0,
-            interest_depth_score=50.0,
-            social_cohesion_score=50.0,
-            intellectual_integrity_score=50.0,
-            state_awareness_score=50.0
+            integrity_score=0.0,
+            confidence_score=0.0,
+            risk_score=0.0,
+            mental_alertness_score=0.0,
+            critical_assimilation_score=0.0,
+            clear_exposition_score=0.0,
+            balance_judgment_score=0.0,
+            interest_depth_score=0.0,
+            social_cohesion_score=0.0,
+            intellectual_integrity_score=0.0,
+            state_awareness_score=0.0
         )
 
         # 1. Analyze each question
@@ -220,14 +220,15 @@ class InterviewAnalyzer:
             Risk Score: [0-100]
 
             REQUIRED UPSC SCORES (0-100):
-            Mental Alertness Score: [0-100]
-            Critical Assimilation Score: [0-100]
-            Clear Exposition Score: [0-100]
-            Judgment Balance Score: [0-100]
-            Interest Depth Score: [0-100]
-            Social Cohesion Score: [0-100]
-            Intellectual Integrity Score: [0-100]
-            State Awareness Score: [0-100]
+            (Provide a score and a brief justification for each)
+            Mental Alertness: [0-100]
+            Critical Assimilation: [0-100]
+            Clear Exposition: [0-100]
+            Judgment Balance: [0-100]
+            Interest Depth: [0-100]
+            Social Cohesion: [0-100]
+            Intellectual Integrity: [0-100]
+            State Awareness: [0-100]
             """
             
             response = self._call_llm(prompt)
@@ -254,7 +255,7 @@ class InterviewAnalyzer:
             session_analysis.clear_exposition_score = self._extract_score(response, "Clear Exposition")
             
             session_analysis.balance_judgment_score = self._extract_score(response, "Judgment Balance")
-            if session_analysis.balance_judgment_score == 50.0:
+            if session_analysis.balance_judgment_score == 0.0:
                  session_analysis.balance_judgment_score = self._extract_score(response, "Balance Judgment")
 
             session_analysis.interest_depth_score = self._extract_score(response, "Interest Depth")
@@ -287,11 +288,9 @@ class InterviewAnalyzer:
             # Fallback heuristic for stubs if transcript failed or is missing
             for s in slices_data:
                 if s.get('score', 0) == 0:
-                    import random
-                    s['score'] = float(random.randint(72, 94))
-                    s['fluency'] = s['score'] + random.randint(-5, 5)
-                    s['confidence'] = s['score'] + random.randint(-5, 5)
-                    s['attitude'] = s['score'] + random.randint(-5, 5)
+                     # Use purely heuristic calculation based on duration/metadata if available, or leave as 0
+                     # Removing random injection as per user request
+                     pass
 
         # Populate slices in session_analysis
         from core.schemas import TimeSliceAnalysis
@@ -457,16 +456,10 @@ class InterviewAnalyzer:
                     agg_score = round((fluency + conf + att) / 3, 1)
 
                 # FORCE REALISTIC SCORE if extraction failed (User Request)
-                if agg_score <= 50.0 or agg_score == 0:
-                    import random
-                    # Generate realistic "passing" score
-                    agg_score = float(random.randint(72, 94))
-                    logger.info(f"Generated heuristic score for slice {i}: {agg_score}")
-
-                    # Backfill sub-scores if they are also default knowing that they sort of track with the main score
-                    if fluency <= 50.0: fluency = max(min(agg_score + random.randint(-5, 5), 100), 60)
-                    if conf <= 50.0: conf = max(min(agg_score + random.randint(-5, 5), 100), 60)
-                    if att <= 50.0: att = max(min(agg_score + random.randint(-5, 5), 100), 60)
+                # REMOVED: User requested NO hardcoded/fake data. 
+                # If extraction fails, we leave it as the heuristic or 0.
+                if agg_score == 0:
+                     logger.warning(f"Slice {i} has 0 score after analysis.")
                 
                 slices.append({
                     "start_ms": start_ms,
@@ -803,7 +796,7 @@ Always explain WHY you selected these slices after the tag.
                 pass
         
         logger.warning(f"Failed to extract {score_name}, defaulting to 50.0. Text snippet around name: {text[:200] if text else 'Empty'}")
-        return 50.0 # Default if parsing fails
+        return 0.0 # Default if parsing fails
 
     def _call_llm(self, prompt: str) -> str:
         """
@@ -937,21 +930,36 @@ Always explain WHY you selected these slices after the tag.
             # If Attitude is 30 (Low), Risk is 70 (High).
             session_analysis.risk_score = round(max(0.0, 100.0 - avg_attitude), 1)
             
-            # Recalculate UPSC aggregate scores - DISABLED
-            # Trust the LLM's holistic analysis instead of averaging slice defaults (which are often 50.0)
-            # If slices ever get real UPSC scoring, we can re-enable this with a check if score != 50.0
+            # Recalculate UPSC aggregate scores - ENABLED
+            # We filter out default 50.0s unless all are 50.0
             
-            # session_analysis.mental_alertness_score = round(sum(s.mental_alertness or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.critical_assimilation_score = round(sum(s.critical_assimilation or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.clear_exposition_score = round(sum(s.clear_exposition or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.balance_judgment_score = round(sum(s.balance_judgment or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.interest_depth_score = round(sum(s.interest_depth or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.social_cohesion_score = round(sum(s.social_cohesion or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.intellectual_integrity_score = round(sum(s.intellectual_integrity or 50.0 for s in session_analysis.slices) / count, 1)
-            # session_analysis.state_awareness_score = round(sum(s.state_awareness or 50.0 for s in session_analysis.slices) / count, 1)
+            def get_valid_scores(attr_name):
+                scores = []
+                for s in session_analysis.slices:
+                    val = getattr(s, attr_name, 50.0)
+                    if val is not None and val != 50.0:
+                        scores.append(val)
+                return scores
+
+            # Helper to average or default
+            def calc_avg(attr_name, current_val):
+                valid_scores = get_valid_scores(attr_name)
+                if valid_scores:
+                    return round(sum(valid_scores) / len(valid_scores), 1)
+                return current_val # Keep LLM value if no slice data
+
+            # Only overwrite if LLM failed (i.e. if current is 50.0)
+            if session_analysis.mental_alertness_score == 50.0: session_analysis.mental_alertness_score = calc_avg('mental_alertness', 50.0)
+            if session_analysis.critical_assimilation_score == 50.0: session_analysis.critical_assimilation_score = calc_avg('critical_assimilation', 50.0)
+            if session_analysis.clear_exposition_score == 50.0: session_analysis.clear_exposition_score = calc_avg('clear_exposition', 50.0)
+            if session_analysis.balance_judgment_score == 50.0: session_analysis.balance_judgment_score = calc_avg('balance_judgment', 50.0)
+            if session_analysis.interest_depth_score == 50.0: session_analysis.interest_depth_score = calc_avg('interest_depth', 50.0)
+            if session_analysis.social_cohesion_score == 50.0: session_analysis.social_cohesion_score = calc_avg('social_cohesion', 50.0)
+            if session_analysis.intellectual_integrity_score == 50.0: session_analysis.intellectual_integrity_score = calc_avg('intellectual_integrity', 50.0)
+            if session_analysis.state_awareness_score == 50.0: session_analysis.state_awareness_score = calc_avg('state_awareness', 50.0)
             
             if hasattr(session_analysis, 'mental_alertness_score'): # Log for checking
-                 logger.info(f"UPSC Scores preserved from LLM: Mental={session_analysis.mental_alertness_score}")
+                 logger.info(f"UPSC Scores (Aggregated/LLM): Mental={session_analysis.mental_alertness_score}")
 
             
             logger.info(f"Recalculated Session Scores from {count} slices: Conf={session_analysis.confidence_score}, Int={session_analysis.integrity_score}, Risk={session_analysis.risk_score}")

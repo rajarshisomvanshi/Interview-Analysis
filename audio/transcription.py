@@ -98,10 +98,17 @@ class Transcriber:
         language: Optional[str]
     ) -> Tuple[List[Dict], str]:
         """Transcribe using faster-whisper"""
+        # Optimized prompt for Hinglish (Hindi + English) in interviews
+        initial_prompt = "This is an interview conversation in Hinglish, mixing Hindi and English languages."
+        
         segments, info = self.model.transcribe(
             str(audio_path),
             language=language,
-            word_timestamps=True
+            word_timestamps=True,
+            initial_prompt=initial_prompt,
+            beam_size=5,
+            vad_filter=True,
+
         )
         
         detected_lang = info.language

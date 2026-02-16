@@ -16,6 +16,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [input, setInput] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [analysisStatus, setAnalysisStatus] = useState<any>(null);
   const [currentSliceIndex, setCurrentSliceIndex] = useState(0);
@@ -238,6 +239,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       }));
     } finally {
       setIsSpeaking(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!activeCandidate) return;
+    try {
+      setIsExporting(true);
+      const response = await fetch(`${API_BASE_URL}/sessions/${activeCandidate.id}/report/pdf`);
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Interview_Report_${activeCandidate.name.replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error("Export error", e);
+      alert("Failed to export PDF. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -630,9 +656,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             )}
           </div>
           {current && (
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-semibold rounded-sm transition-colors border border-white/10">
-              <span className="material-symbols-outlined text-sm">download</span>
-              Export Results
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-semibold rounded-sm transition-colors border border-white/10 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-sm">{isExporting ? 'hourglass_top' : 'download'}</span>
+              {isExporting ? 'Generating...' : 'Export Results'}
             </button>
           )}
         </header>
@@ -866,9 +896,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                                 <span className="text-[10px] font-black orbitron text-emerald-500">SEGMENT {idx + 1}</span>
                                 <span className="text-[10px] text-slate-600 font-mono">{formatTime(slice.start_ms)} - {formatTime(slice.end_ms)}</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-1.5 h-1.5 rounded-full ${slice.score > 70 ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                                <span className="text-[10px] font-bold text-slate-400">Score: {slice.score}</span>
+                              <div className="flex items-center gap-4">
+                                {activeCandidate.status === 'completed' && (
+                                  <button
+                                    onClick={handleExport}
+                                    disabled={isExporting}
+                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors border border-emerald-500/30 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">{isExporting ? 'hourglass_top' : 'picture_as_pdf'}</span>
+                                    {isExporting ? 'Generating...' : 'Export Results'}
+                                  </button>
+                                )}
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
+                                  <div className={`w-2 h-2 rounded-full ${activeCandidate.status === 'processing' ? 'bg-amber-500 animate-pulse' : activeCandidate.status === 'completed' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                  <span className="text-xs font-medium text-slate-300 uppercase tracking-wide">{activeCandidate.status}</span>
+                                </div>
                               </div>
                             </div>
                             <h4 className="text-sm font-bold text-white mb-2">"{slice.insight}"</h4>

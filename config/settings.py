@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     
     # Audio models
     whisper_model: str = Field(
-        default="base",
+        default="medium",
         description="Whisper model size (tiny, base, small, medium, large)"
     )
     use_faster_whisper: bool = Field(

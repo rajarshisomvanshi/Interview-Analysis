@@ -37,7 +37,7 @@ export const api = {
             role: 'Applicant', // Default role if not stored
             status: s.status,
             timeAgo: new Date(s.created_at).toLocaleDateString(),
-            avatar: `https://ui-avatars.com/api/?name=${s.interviewee_name}&background=random`,
+            avatar: `https://ui-avatars.com/api/?name=${s.interviewee_name}&background=0D9488&color=fff`,
             integrityScore: s.integrity_score,
             confidenceScore: s.confidence_score,
             riskScore: s.risk_score,

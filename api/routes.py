@@ -677,6 +677,7 @@ async def get_analysis_results(session_id: str):
     )
 
 
+
 @router.get("/sessions/{session_id}/download/analysis-report")
 async def download_analysis_report(session_id: str):
     """Download the generated Markdown report"""
@@ -690,6 +691,40 @@ async def download_analysis_report(session_id: str):
         path=report_path,
         filename=f"interview_analysis_{session_id}.md",
         media_type="text/markdown"
+    )
+
+@router.get("/sessions/{session_id}/report/pdf")
+async def download_pdf_report(session_id: str, background_tasks: BackgroundTasks):
+    """Generate and download PDF report"""
+    # 1. Check if PDF already exists
+    pdf_path = settings.get_session_dir(session_id) / "interview_report.pdf"
+    
+    # 2. Gather Data
+    session_data = storage.load_session_data(session_id)
+    analysis = storage.load_analysis(session_id)
+    
+    if not session_data or not analysis:
+        raise HTTPException(status_code=404, detail="Session analysis not found")
+        
+    # 3. Generate if needed (or always regenerate to ensure fresh data?)
+    # Generating on fly ensures latest soft skills analysis
+    try:
+        from utils.pdf_generator import PDFReportGenerator
+        
+        pdf_gen = PDFReportGenerator(session_data, analysis)
+        pdf_gen.create_report()
+        pdf_gen.save(pdf_path)
+        
+    except Exception as e:
+        logger.error(f"PDF Generation failed: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
+        
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=pdf_path,
+        filename=f"Interview_Report_{session_data.metadata.interviewee_name.replace(' ', '_')}.pdf",
+        media_type="application/pdf"
     )
 
 
