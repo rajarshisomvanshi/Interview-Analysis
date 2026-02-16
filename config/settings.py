@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     
     # YOLO models
     yolo_phone_model: str = Field(
-        default="yolov8n.pt",
+        default="models/yolov8n.pt",
         description="YOLO model for phone video (face detection)"
     )
     yolo_cctv_model: str = Field(
-        default="yolov8s-pose.pt",
+        default="models/yolov8s-pose.pt",
         description="YOLO model for CCTV video (pose estimation)"
     )
     
